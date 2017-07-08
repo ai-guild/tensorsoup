@@ -1,3 +1,4 @@
 *.ipynb
 .*swp
 __pycache__
+datasets/
