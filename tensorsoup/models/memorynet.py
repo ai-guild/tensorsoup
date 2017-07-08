@@ -10,13 +10,16 @@ class MemoryNet(object):
 
     def __init__(self, hdim, num_hops, vocab_size, lr=0.01):
 
+        # reset graph
+        tf.reset_default_graph()
+
         # initializer
         init = tf.random_normal_initializer(0, 0.1)
 
         # build placeholders
-        questions = tf.placeholder(tf.int32, shape=[None, None], name='questions' )
-        stories = tf.placeholder(tf.int32, shape=[None, None, None], name='stories' )
-        answers = tf.placeholder(tf.int32, shape=[None, ], name='answers' )
+        self.questions = tf.placeholder(tf.int32, shape=[None, None], name='questions' )
+        self.stories = tf.placeholder(tf.int32, shape=[None, None, None], name='stories' )
+        self.answers = tf.placeholder(tf.int32, shape=[None, ], name='answers' )
 
         # embedding
         A = tf.get_variable('A', shape=[vocab_size, hdim], dtype=tf.float32, 
@@ -27,7 +30,7 @@ class MemoryNet(object):
                            initializer=init)
 
         # embed questions
-        u0 = tf.nn.embedding_lookup(B, questions)
+        u0 = tf.nn.embedding_lookup(B, self.questions)
         u0 = tf.reduce_sum(u0, axis=1)
         u = [u0] # accumulate question emb
 
@@ -38,9 +41,9 @@ class MemoryNet(object):
                 initializer=init)
 
         # embed stories
-        m = tf.nn.embedding_lookup(A, stories)
+        m = tf.nn.embedding_lookup(A, self.stories)
         m = tf.reduce_sum(m, axis=2) + TA
-        c = tf.nn.embedding_lookup(C, stories)
+        c = tf.nn.embedding_lookup(C, self.stories)
         c = tf.reduce_sum(c, axis=2)
 
         # memory loop
@@ -58,17 +61,31 @@ class MemoryNet(object):
         # optimization
         cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
             logits=self.logits,
-            labels=answers
+            labels=self.answers
             )
         # attach loss to instance
         self.loss = tf.reduce_mean(cross_entropy)
-        optimizer = tf.train.AdagradOptimizer(learning_rate=lr)
+
+        # evaluation
+        probs = tf.nn.softmax(self.logits)
+        correct_labels = tf.equal(tf.cast(self.answers, tf.int64), tf.argmax(probs, axis=-1))
+        self.accuracy = tf.reduce_mean(tf.cast(correct_labels, tf.float32))
+
+        #optimizer = tf.train.AdagradOptimizer(learning_rate=lr)
+        optimizer = tf.train.AdamOptimizer(learning_rate=lr)
         # attach train op to instance
         self.train_op = optimizer.minimize(self.loss)
+
+        # placeholders 
+        self._placholders()
+
+    # expose placeholders as ordered list
+    def _placholders(self):
+        self.placeholders = [ self.stories, self.questions, self.answers ]
 
 
 if __name__ == '__main__':
 
-    memnet = MemoryNet(num_hops=3, hdim=150, vocab_size=1000, lr=0.01)
+    memnet = MemoryNet(num_hops=3, hdim=150, vocab_size=1000, lr=0.001)
 
     print(sanity([memnet.loss, memnet.train_op]))
