@@ -128,18 +128,20 @@ def gated_attention_net(enc_states, init_state, batch_size,
     shape(ci)         : [B,d]
 
 '''
-def ptr_attention(enc_states, dec_state, params, normalize=False):
+def ptr_attention(enc_states, dec_state, d, init=None, normalize=False):
+
+    # project enc/dec states
+    Wa = tf.get_variable('Wa', [d, d], initializer=init)
+    Ua = tf.get_variable('Ua', [2*d, d], initializer=init)
+    Va = tf.get_variable('Va', [d, 1], initializer=init)
 
     # infer shapes from tensors
     de = tf.shape(enc_states)[-1]
     timesteps = tf.shape(enc_states)[1]
-    d = tf.shape(dec_state)[-1]
 
-    Wa, Ua = params['Wa'], params['Ua']
     # s_j -> [B,L,d]
     a = tf.nn.elu(tf.expand_dims(tf.matmul(dec_state, Wa), axis=1) + 
             tf.reshape(tf.matmul(tf.reshape(enc_states,[-1, de]), Ua), [-1, timesteps, d]))
-    Va = params['Va'] # [d, 1]
     # e_j -> [B, L]
     scores = tf.reshape(tf.matmul(tf.reshape(a, [-1, d]), Va), [-1, timesteps])
 
