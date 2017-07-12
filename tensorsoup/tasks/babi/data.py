@@ -44,7 +44,7 @@ class DataSource(object):
         return [ d[s:e] for d in self.data[dtype] ]
 
     def next_batch(self, dtype='train'):
-        bi = self.batch(self.i)
+        bi = self.batch(self.i, dtype=dtype)
         if self.i < self.n[dtype]//self.batch_size:
             self.i = self.i + 1
         else:

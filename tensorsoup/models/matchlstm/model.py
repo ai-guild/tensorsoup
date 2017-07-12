@@ -82,7 +82,14 @@ class MatchLSTM():
         self.train_op = optimizer.apply_gradients(clipped_gvs)
 
         # create session
-        self.sess = tf.Session()
+        # self.sess = tf.Session()
+
+        # placholders as ordered list
+        self._placeholders()
+
+    
+    def _placeholders(self):
+        self.placeholders = [ self.passages, self.queries, self.targets, self.masks ]
 
 
     def train(self, squad, batch_size=128, epochs=1000, eval_interval=10):

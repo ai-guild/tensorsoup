@@ -18,7 +18,7 @@ class Trainer(object):
         model = self.model
 
         avg_loss, avg_acc = 0., 0.
-        for i in range(num_batches):
+        for i in tqdm(range(num_batches)):
             bi = datasrc.batch(i, 'test')
             l, acc = self.sess.run( [model.loss, model.accuracy],
                             feed_dict = self.build_feed_dict(model.placeholders, bi))
@@ -45,7 +45,7 @@ class Trainer(object):
         
         for i in range(epochs):
             avg_loss, avg_acc = 0., 0.
-            for j in range(num_batches):
+            for j in tqdm(range(num_batches)):
                 bj = datasrc.next_batch('train')
                 l,acc, _ = sess.run( [model.loss, model.accuracy, model.train_op],
                                            feed_dict = self.build_feed_dict(model.placeholders, bj) )
@@ -65,5 +65,3 @@ class Trainer(object):
 
     def build_feed_dict(self, l1, l2):
         return { i:j for i,j in zip(l1,l2)}
-
-
