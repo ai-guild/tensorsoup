@@ -80,13 +80,19 @@ class MatchLSTM():
         ce = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
                                 logits=logits*masks, labels=targets))
 
+        # L1 regularizer
+        l1_regularizer = tf.contrib.layers.l1_regularizer(scale=0.001, scope=None)
+        weights = tf.trainable_variables() # all vars of your graph
+        regularization_penalty = tf.contrib.layers.apply_regularization(l1_regularizer, weights)
+        regularized_loss = ce + (1e-4*regularization_penalty)
+
         # Evaluation : accuracy
         probs = tf.nn.softmax(logits)
         correct_labels = tf.equal(tf.argmax(probs, axis=-1), tf.cast(targets, tf.int64))
         start_idx, end_idx = tf.unstack(tf.cast(correct_labels, dtype=tf.float32))
         accuracy = tf.reduce_mean(start_idx * end_idx)
 
-        return ce, accuracy
+        return regularized_loss, accuracy
 
 
 

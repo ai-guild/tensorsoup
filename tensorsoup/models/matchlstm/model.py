@@ -63,11 +63,17 @@ class MatchLSTM():
             probs, logits = answer_pointer(mlstm_states, self.d, initializer=self.init)
 
         # Loss/Cost
-        ce = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits,
-                        labels=self.targets)
-        self.loss = tf.reduce_mean(ce)
-        self.masked_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
+        ce = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
                                 logits=logits*self.masks, labels=self.targets))
+
+        # L1 regularizer
+        l1_regularizer = tf.contrib.layers.l1_regularizer(scale=0.001, scope=None)
+        weights = tf.trainable_variables() # all vars of your graph
+        regularization_penalty = tf.contrib.layers.apply_regularization(l1_regularizer, weights)
+        regularized_loss = ce + (1e-4*regularization_penalty)
+
+        self.loss = regularized_loss
+
 
         # Evaluation : accuracy
         correct_labels = tf.equal(tf.argmax(probs, axis=-1), tf.cast(self.targets, tf.int64))
@@ -77,7 +83,7 @@ class MatchLSTM():
         # Optimization
         optimizer = tf.train.AdamOptimizer(learning_rate=self.lr)
         # gradient clipping
-        gvs = optimizer.compute_gradients(self.masked_loss)
+        gvs = optimizer.compute_gradients(self.loss)
         clipped_gvs = [(tf.clip_by_norm(grad, 2.), var) for grad, var in gvs]
         self.train_op = optimizer.apply_gradients(clipped_gvs)
 
@@ -104,7 +110,7 @@ class MatchLSTM():
             nan_count = 0
             for j in tqdm(range(num_batches)):
                 pj, qj, tj, mj = squad.next_batch(batch_size, 'train')
-                l, acc, _ = self.sess.run( [self.masked_loss, self.accuracy, self.train_op],
+                l, acc, _ = self.sess.run( [self.loss, self.accuracy, self.train_op],
                                 feed_dict = {
                                     self.passages : pj,
                                     self.queries : qj,
@@ -136,7 +142,7 @@ class MatchLSTM():
         nan_count = 0
         for i in tqdm(range(num_batches)):
             pi, qi, ti, mi = squad.batch('dev', i,  batch_size)
-            l, acc = self.sess.run( [self.masked_loss, self.accuracy],
+            l, acc = self.sess.run( [self.loss, self.accuracy],
                             feed_dict = {
                                 self.passages : pi,
                                 self.queries : qi,
