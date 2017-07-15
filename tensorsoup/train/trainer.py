@@ -32,6 +32,9 @@ class Trainer(object):
 
     def fit(self, epochs, eval_interval=10, verbose=True):
 
+        def tq(x):
+            return tqdm(x) if verbose else x
+
         model = self.model
         datasrc = self.datasrc
         batch_size = self.datasrc.batch_size
@@ -41,11 +44,11 @@ class Trainer(object):
         sess.run(tf.global_variables_initializer())
         
         num_examples = datasrc.n['train']
-        num_batches = int((num_examples/batch_size)/8)
+        num_batches = int((num_examples/batch_size))
         
         for i in range(epochs):
             avg_loss, avg_acc = 0., 0.
-            for j in tqdm(range(num_batches)):
+            for j in tq(range(num_batches)):
                 bj = datasrc.next_batch('train')
                 l,acc, _ = sess.run( [model.loss, model.accuracy, model.train_op],
                                            feed_dict = self.build_feed_dict(model.placeholders, bj) )

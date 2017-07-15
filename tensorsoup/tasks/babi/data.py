@@ -54,7 +54,7 @@ class DataSource(object):
     def fetch(self, task_id, datadir):
 
         # data directory
-        datadir = datadir + '/en/'
+        datadir = datadir #+ '/en-10k/'
         # task data
         train, test = load_task(datadir, task_id)
         data = train + test
@@ -74,7 +74,8 @@ class DataSource(object):
 
         # train/validation/test sets
         S, Q, A = vectorize_data(train, word_idx, sentence_size, memory_size)
-        trainS, valS, trainQ, valQ, trainA, valA = cross_validation.train_test_split(S, Q, A, test_size=.1, random_state=None)
+        trainS, valS, trainQ, valQ, trainA, valA = cross_validation.train_test_split(
+                S, Q, A, test_size=.1, random_state=None)
         testS, testQ, testA = vectorize_data(test, word_idx, sentence_size, memory_size)
 
         # params
@@ -82,7 +83,8 @@ class DataSource(object):
         n_test = testS.shape[0]
         n_val = valS.shape[0]
 
-        batches = zip(range(0, n_train-self.batch_size, self.batch_size), range(self.batch_size, n_train, self.batch_size))
+        batches = zip(range(0, n_train-self.batch_size, self.batch_size), 
+                range(self.batch_size, n_train, self.batch_size))
         batches = [(start, end) for start, end in batches]
 
         data = {
