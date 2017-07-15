@@ -23,6 +23,10 @@ class MemoryNet(object):
         self.stories = tf.placeholder(tf.int32, shape=[None, memsize, sentence_size], name='stories' )
         self.answers = tf.placeholder(tf.int32, shape=[None, ], name='answers' )
 
+
+        dropout = tf.random_normal([memsize, 1], mean=0) > -2
+        noisy_stories = self.stories * tf.cast(dropout, tf.int32)
+        self.noisy_stories = tf.reverse(noisy_stories, axis=[1])
         # position encoding
         encoding = tf.constant(self.position_encoding(sentence_size, hdim))
 
@@ -48,9 +52,9 @@ class MemoryNet(object):
                 initializer=init)
 
         # embed stories
-        m = tf.nn.embedding_lookup(A, self.stories)
+        m = tf.nn.embedding_lookup(A, self.noisy_stories)
         m = tf.reduce_sum(m*encoding, axis=2) + TA
-        c = tf.nn.embedding_lookup(C, self.stories)
+        c = tf.nn.embedding_lookup(C, self.noisy_stories)
         c = tf.reduce_sum(c, axis=2) + TC
 
         # memory loop
