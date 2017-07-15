@@ -63,6 +63,7 @@ class Trainer(object):
             
             # eval
             if i and i%eval_interval == 0:
+                print('epoch:{} '.format(i), end='')
                 self.evaluate()
 
 

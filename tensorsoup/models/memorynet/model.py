@@ -10,7 +10,7 @@ from sanity import *
 class MemoryNet(object):
 
     def __init__(self, hdim, num_hops, memsize, sentence_size, 
-            vocab_size, lr=0.01):
+                 vocab_size, lr=0.01):
 
         # reset graph
         tf.reset_default_graph()
@@ -31,11 +31,11 @@ class MemoryNet(object):
         encoding = tf.constant(self.position_encoding(sentence_size, hdim))
 
         # embedding
-        A = tf.get_variable('A', shape=[vocab_size, hdim], dtype=tf.float32, 
+        A = tf.get_variable('A', shape=[num_hops, vocab_size, hdim], dtype=tf.float32, 
                            initializer=init)
         B = tf.get_variable('B', shape=[vocab_size, hdim], dtype=tf.float32, 
                            initializer=init)
-        C = tf.get_variable('C', shape=[vocab_size, hdim], dtype=tf.float32, 
+        C = tf.get_variable('C', shape=[num_hops, vocab_size, hdim], dtype=tf.float32, 
                            initializer=init)
 
         # embed questions
@@ -46,19 +46,19 @@ class MemoryNet(object):
         # more variables
         H = tf.get_variable('H', dtype=tf.float32, shape=[hdim, hdim],
                 initializer=init)
-        TA = tf.get_variable('TA', dtype=tf.float32, shape=[memsize, hdim],
+        TA = tf.get_variable('TA', dtype=tf.float32, shape=[num_hops, memsize, hdim],
                 initializer=init)
-        TC = tf.get_variable('TC', dtype=tf.float32, shape=[memsize, hdim],
+        TC = tf.get_variable('TC', dtype=tf.float32, shape=[num_hops, memsize, hdim],
                 initializer=init)
-
-        # embed stories
-        m = tf.nn.embedding_lookup(A, self.noisy_stories)
-        m = tf.reduce_sum(m*encoding, axis=2) + TA
-        c = tf.nn.embedding_lookup(C, self.noisy_stories)
-        c = tf.reduce_sum(c, axis=2) + TC
 
         # memory loop
         for i in range(num_hops):
+            # embed stories
+            m = tf.nn.embedding_lookup(A[i], self.noisy_stories)
+            m = tf.reduce_sum(m*encoding, axis=2) + TA[i]
+            c = tf.nn.embedding_lookup(C[i], self.noisy_stories)
+            c = tf.reduce_sum(c, axis=2) + TC[i]
+            
             p = tf.reduce_sum(m*tf.expand_dims(u[-1], axis=1), axis=-1)
             o = tf.reduce_sum(tf.expand_dims(p, axis=-1)*c, axis=1)
             u_k = tf.matmul(u[-1], H) + o

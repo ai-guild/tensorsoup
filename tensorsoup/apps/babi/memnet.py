@@ -12,7 +12,7 @@ if __name__ == '__main__':
 
     batch_size = 32
 
-    datasrc = DataSource(datadir='../../../datasets/babi/en/', task_id=1,
+    datasrc = DataSource(datadir='../../../datasets/babi/en-10k/', task_id=19,
             batch_size=batch_size)
 
     # get vocab size from data source
@@ -21,9 +21,9 @@ if __name__ == '__main__':
     sentence_size = datasrc.metadata['sentence_size']
 
     # instantiate model
-    model = MemoryNet(hdim=20, num_hops=1, memsize=memsize, 
+    model = MemoryNet(hdim=20, num_hops=3, memsize=memsize, 
                       sentence_size=sentence_size, vocab_size=vocab_size,
-                      lr = 0.01)
+                      lr = 0.001)
 
     # gpu config
     config = tf.ConfigProto()
@@ -37,4 +37,4 @@ if __name__ == '__main__':
         trainer = Trainer(sess, model, datasrc, batch_size)
 
         # fit model
-        trainer.fit(epochs=500, verbose=False)
+        trainer.fit(epochs=10000, verbose=False)
