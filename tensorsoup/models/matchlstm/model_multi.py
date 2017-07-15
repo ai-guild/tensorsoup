@@ -7,7 +7,7 @@ sys.path.append('../../')
 
 from recurrence import *
 from models.matchlstm.modules import match, answer_pointer
-from sanity import *
+from train.utils import *
 
 
 class MatchLSTM():
@@ -23,6 +23,9 @@ class MatchLSTM():
 
         # initializer
         self.init = tf.random_normal_initializer(-0.08, 0.08)
+
+        # optimizer
+        self.opt = tf.train.GradientDescentOptimizer(learning_rate=0.001)
 
     '''
         Inference 
@@ -74,7 +77,7 @@ class MatchLSTM():
         return logits, probs, placeholders
 
 
-    def loss(self, logits, targets, masks):
+    def compute_loss(self, logits, targets, masks):
 
         # Loss/Cost
         ce = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
@@ -95,27 +98,55 @@ class MatchLSTM():
         return regularized_loss, accuracy
 
 
+    def make_parallel(self, num_copies, num_gpus):
+        # num of copies of model
+        self.n = num_copies
 
-if __name__ == '__main__':
+        # keep track of placholder and gradients
+        tower_grads, ph, losses = [], [], []
 
-    
-    d = 150
-    model = MatchLSTM(emb_dim=100, hidden_dim=d, lr=0.0001)
-    if sanity([model.loss, model.accuracy]):
-        print('Sanity check successful!')
+        with tf.device('/cpu:0'):
+            with tf.variable_scope(tf.get_variable_scope()):
+                # number of copies
+                for i in range(num_gpus):
+                    with tf.device('/gpu:{}'.format(i)):
+                        for j in range(num_copies//num_gpus):
+                            with tf.name_scope('gpu_{}_{}'.format(i,j)) as scope:
+                                # run inference
+                                #  get handles to placeholders, logits and probs
+                                logits, probs, placeholders = self.inference()
+                                # pick targets, masks from placeholders, for loss/optimization
+                                targets, masks = placeholders[2:]
 
-    '''
-    print('Preparing data ...')
-    squad_ = SQuAD(datadir='../../../datasets/SQuAD/', 
-                    glove_file='../../../datasets/glove/glove.6B.100d.txt')
+                                # get loss, accuracy
+                                loss, accuracy = self.compute_loss(logits, targets, masks)
 
-    print('Initializing Model ...')
-    model = MatchLSTM(emb_dim=100, hidden_dim=d, lr=0.0001)
+                                # reuse trainable parameters
+                                tf.get_variable_scope().reuse_variables()
 
-    try:
-        print('Starting Training ...')
-        model.train(squad_, batch_size=128, epochs=2000)
-    except KeyboardInterrupt:
-        model.f.close()
-        model.summarize()
-    '''
+                                # gather gradients
+                                grads = self.opt.compute_gradients(loss)
+
+                                # save grads for averaging later
+                                tower_grads.append(grads)
+
+                                # save the list of placholder handles
+                                ph.append(placeholders)
+
+                                # add loss
+                                losses.append(loss)
+
+            # average gradients
+            grads = average_gradients(tower_grads)
+            # apply averaged gradients
+            apply_gradient_op = self.opt.apply_gradients(grads)
+
+            # attach to instance
+            self.train_op = apply_gradient_op
+            # losses
+            self.loss = losses
+
+            # attach placeholders to instance
+            self.placeholders = ph
+
+        return 

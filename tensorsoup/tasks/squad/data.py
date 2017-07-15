@@ -154,6 +154,17 @@ class DataSource(object):
         return bi
 
 
+    def next_n_batches(self, n, dtype='train'):
+        bi_n = []
+        for _ in range(n):
+            bi_n.append(self.batch(dtype, self.i, batch_size=self.batch_size))
+            if self.i < self.n[dtype]//self.batch_size:
+                self.i = self.i + 1
+            else:
+                self.i = 0
+        return bi_n
+
+
     def get_dataset(self, path):
         contexts = []
         questions = []
