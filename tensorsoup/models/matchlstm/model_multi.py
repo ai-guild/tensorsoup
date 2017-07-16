@@ -103,7 +103,7 @@ class MatchLSTM():
         self.n = num_copies
 
         # keep track of placholder and gradients
-        tower_grads, ph, losses = [], [], []
+        tower_grads, ph, losses, acc = [], [], [], []
 
         with tf.device('/cpu:0'):
             with tf.variable_scope(tf.get_variable_scope()):
