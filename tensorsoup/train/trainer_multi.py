@@ -14,19 +14,24 @@ class Trainer(object):
         datasrc = self.datasrc
         batch_size = datasrc.batch_size
         num_examples = datasrc.n['test']
-        num_batches = num_examples // batch_size
         model = self.model
 
+        # num copies
+        n = model.n
+
+        num_iterations = int(num_examples / (batch_size*n))
+
         avg_loss, avg_acc = 0., 0.
-        for i in tqdm(range(num_batches)):
-            bi = datasrc.batch(i, 'test')
+        datasrc.i = 0 # point to zero index for test
+        for i in tqdm(range(num_iterations)):
+            bi = datasrc.next_n_batches(n, 'test')
             l, acc = self.sess.run( [model.loss, model.accuracy],
                             feed_dict = self.build_feed_dict(model.placeholders, bi))
             avg_loss += l
             avg_acc += acc
 
-        log = 'Evaluation - loss : {}; accuracy : {}'.format(avg_loss/(num_batches),
-                            avg_acc/(num_batches))
+        log = 'Evaluation - loss : {}; accuracy : {}'.format(avg_loss/(num_iterations),
+                            avg_acc/(num_iterations))
         tqdm.write(log)
 
 
@@ -48,16 +53,16 @@ class Trainer(object):
         
         for i in range(epochs):
             avg_loss, avg_acc = 0., 0.
+            datasrc.i = 0 # point to start index
             for j in tqdm(range(num_iterations)):
                 bj = datasrc.next_n_batches(n, 'train')
-                l, _ = sess.run( [model.loss, model.train_op],
+                l, acc, _ = sess.run( [model.loss, model.accuracy, model.train_op],
                                            feed_dict = self.build_feed_dict(model.placeholders, bj) )
-                tqdm.write(str(sum(l)/len(l)))
-                            
-            '''
+
                 # accumulate loss, accuracy
                 avg_loss += l
                 avg_acc += acc
+
             if verbose:
                 log = '[{}] loss : {}; accuracy : {}'.format(i,
                         avg_loss/(num_iterations), avg_acc/(num_iterations))
@@ -66,7 +71,7 @@ class Trainer(object):
             # eval
             if i and i%eval_interval == 0:
                 self.evaluate()
-            '''
+
 
     def build_feed_dict(self, ll1, ll2):
         feed_dict = {}

@@ -119,17 +119,13 @@ class MatchLSTM():
                                 targets, masks = placeholders[2:]
 
                                 # get loss, accuracy
-                                loss_, accuracy = self.compute_loss(logits, targets, masks)
-
-                                print(loss_)
+                                loss, accuracy = self.compute_loss(logits, targets, masks)
 
                                 # reuse trainable parameters
                                 tf.get_variable_scope().reuse_variables()
 
                                 # gather gradients
-                                grads = self.opt.compute_gradients(loss_)
-
-                                print(grads)
+                                grads = self.opt.compute_gradients(loss)
 
                                 # save grads for averaging later
                                 tower_grads.append(grads)
@@ -137,8 +133,9 @@ class MatchLSTM():
                                 # save the list of placholder handles
                                 ph.append(placeholders)
 
-                                # add loss
-                                losses.append(loss_)
+                                # save loss and accuracy
+                                losses.append(loss)
+                                acc.append(accuracy)
 
             # average gradients
             grads = average_gradients(tower_grads)
@@ -148,7 +145,8 @@ class MatchLSTM():
             # attach to instance
             self.train_op = apply_gradient_op
             # losses
-            self.loss = losses
+            self.loss = tf.reduce_mean(losses)
+            self.accuracy = tf.reduce_mean(acc)
 
             # attach placeholders to instance
             self.placeholders = ph
