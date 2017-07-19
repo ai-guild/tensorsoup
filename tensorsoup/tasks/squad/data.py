@@ -23,21 +23,21 @@ class DataSource(object):
         if os.path.isfile(datadir + '/data.train'):
             # load data
             self.train = self.load(datadir, tag='train')
-            self.dev   = self.load(datadir, tag='dev')
+            self.test   = self.load(datadir, tag='test')
         else:
             # prepare data
             self.process(datadir)
 
         # convenience dict
-        self.data = { 'train' : self.train, 'dev' : self.dev }
+        self.data = { 'train' : self.train, 'test' : self.test }
 
         # data cache
-        self.cache = { 'train' : {}, 'dev' : {} }
+        self.cache = { 'train' : {}, 'test' : {} }
 
         # num of examples
         self.n = {}
         self.n['train'] = len(self.data['train']['passages'])
-        self.n['dev']   = len(self.data['dev']['passages'])
+        self.n['test']   = len(self.data['test']['passages'])
 
         print('Initializing Glove Model ...')
         self.glove = self.loadGloveModel(glove_file)
@@ -47,6 +47,12 @@ class DataSource(object):
 
         # current iteration
         self.i = 0
+
+        # list of batch id's
+        #  to sample from
+        self.batches = {}
+        self.batches['train'] = list(range(self.n['train']))
+        self.batches['test'] = list(range(self.n['test']))
 
 
     def process(self, datadir='datasets/SQuAD/'):
@@ -72,19 +78,19 @@ class DataSource(object):
         self.train['sps'] = sps
         self.train['eps'] = eps
 
-        # prepare dev set
-        print('Preparing Dev Set ...')
+        # prepare test set
+        print('Preparing test Set ...')
         cons,qs,sps,eps = self.get_dataset(datadir + 'dev-v1.1.json')
         cons,qs,sps, eps = shuffle(cons,qs,sps, eps) 
-        self.dev = {}
-        self.dev['passages'] = cons
-        self.dev['queries'] = qs
-        self.dev['sps'] = sps
-        self.dev['eps'] = eps
+        self.test = {}
+        self.test['passages'] = cons
+        self.test['queries'] = qs
+        self.test['sps'] = sps
+        self.test['eps'] = eps
 
         # save processed data
         self.save(self.train, datadir)
-        self.save(self.dev, datadir, tag='dev')
+        self.save(self.test, datadir, tag='test')
 
 
     def save(self, data_dict, datadir='.', tag='train'):
@@ -140,7 +146,7 @@ class DataSource(object):
 
 
     def rand_next_batch(self, dtype='train'):
-        # select train/dev
+        # select train/test
         i = np.random.randint(0, self.n[dtype]//self.batch_size -1)
         return self.batch(dtype, i, self.batch_size)
 
@@ -155,6 +161,18 @@ class DataSource(object):
 
 
     def next_n_batches(self, n, dtype='train'):
+        bi_n = []
+        for _ in range(n):
+            bi_n.append(self.batch(dtype, self.i, batch_size=self.batch_size))
+            if self.i < self.n[dtype]//self.batch_size:
+                self.i = self.i + 1
+            else:
+                self.i = 0
+        return bi_n
+
+
+    def next_n_random_batches(self, n, dtype='train'):
+        batches = random.sample(self.batches)
         bi_n = []
         for _ in range(n):
             bi_n.append(self.batch(dtype, self.i, batch_size=self.batch_size))
