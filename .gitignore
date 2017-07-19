@@ -6,3 +6,4 @@ screenlog*
 env/
 *.log
 log.*
+log/

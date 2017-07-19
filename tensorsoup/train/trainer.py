@@ -27,8 +27,14 @@ class Trainer(object):
         datasrc.i = 0 # point to zero index for test
         for i in tqdm(range(num_iterations)):
             bi = datasrc.next_batch(n, 'test')
-            l, acc = self.sess.run( [model.loss, model.accuracy],
+
+            fetch_data = [model.loss, model.accuracy, model.train_op]
+
+            results = self.sess.run( fetch_data,
                             feed_dict = build_feed(model.placeholders, bi))
+
+            l, acc = results[:2]
+
             avg_loss += l
             avg_acc += acc
 
@@ -37,7 +43,7 @@ class Trainer(object):
         tqdm.write(log)
 
 
-    def fit(self, epochs, eval_interval=10, verbose=True):
+    def fit(self, epochs, eval_interval=10, verbose=True, visualizer=None):
 
         def tq(x):
             return tqdm(x) if verbose else x
@@ -63,8 +69,21 @@ class Trainer(object):
             datasrc.i = 0 # point to start index
             for j in tq(range(num_iterations)):
                 bj = datasrc.next_batch(n, 'train')
-                l, acc, _ = sess.run( [model.loss, model.accuracy, model.train_op],
-                                           feed_dict = build_feed(model.placeholders, bj) )
+
+                # fetch items
+                fetch_data = [model.loss, model.accuracy, model.train_op]
+
+                if visualizer:
+                    fetch_data.append(visualizer.summary_op)
+
+                results = sess.run( fetch_data, 
+                        feed_dict = build_feed(model.placeholders, bj) )
+
+                l, acc = results[:2]
+
+                if visualizer:
+                    if i % visualizer.interval == 0:
+                        visualizer.log(results[-1], j)
 
                 # accumulate loss, accuracy
                 avg_loss += l

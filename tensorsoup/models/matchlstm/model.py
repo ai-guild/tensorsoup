@@ -25,6 +25,9 @@ class MatchLSTM():
         # initializer
         self.init = tf.random_normal_initializer(-0.08, 0.08)
 
+        # num of copies of model (for multigpu training)
+        self.n = 1
+
         # optimizer
         self.opt = tf.train.GradientDescentOptimizer(learning_rate=0.001)
 
