@@ -151,13 +151,17 @@ class DataSource(object):
         return self.batch(dtype, i, self.batch_size)
 
 
-    def next_batch(self, dtype='train'):
-        bi = self.batch(dtype, self.i, batch_size=self.batch_size)
-        if self.i < self.n[dtype]//self.batch_size:
-            self.i = self.i + 1
-        else:
-            self.i = 0
-        return bi
+    def next_batch(self, n=1, dtype='train'):
+
+        if n==1:
+            bi = self.batch(dtype, self.i, batch_size=self.batch_size)
+            if self.i < self.n[dtype]//self.batch_size:
+                self.i = self.i + 1
+            else:
+                self.i = 0
+            return bi
+        
+        return self.next_n_batches(n, dtype=dtype)
 
 
     def next_n_batches(self, n, dtype='train'):
