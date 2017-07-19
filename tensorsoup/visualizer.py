@@ -8,14 +8,22 @@ class Visualizer(object):
         self.logdir = logdir
         self.writer = tf.summary.FileWriter(self.logdir)
         self.interval = interval
+        self.summary_op = None
 
     def attach_graph(self, graph):
         self.writer.add_graph(graph)
+        if not self.summary_op:
+            self.merge()
 
     def attach_scalars(self, model):
         tf.summary.scalar('loss', model.loss)
         tf.summary.scalar('accuracy', model.accuracy)
-        self.merge()
+
+    def attach_params(self):
+        v = tf.trainable_variables()
+        with tf.name_scope('params'):
+            for vi in v:
+                self.variable_summaries(vi, name=vi.name[:-2])
 
     def merge(self):
         self.summary_op = tf.summary.merge_all()
@@ -23,9 +31,9 @@ class Visualizer(object):
     def log(self, summary, i):
         self.writer.add_summary(summary, i)
 
-    def variable_summaries(self, var):
+    def variable_summaries(self, var, name='summaries'):
       """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
-      with tf.name_scope('summaries'):
+      with tf.name_scope(name):
         mean = tf.reduce_mean(var)
         tf.summary.scalar('mean', mean)
         with tf.name_scope('stddev'):

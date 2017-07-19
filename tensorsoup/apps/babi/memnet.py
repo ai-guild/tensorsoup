@@ -31,6 +31,7 @@ if __name__ == '__main__':
     #  by default, writes to ./log/
     vis = Visualizer()
     vis.attach_scalars(model)
+    vis.attach_params() # histograms of trainable variables
 
     # gpu config
     config = tf.ConfigProto()
