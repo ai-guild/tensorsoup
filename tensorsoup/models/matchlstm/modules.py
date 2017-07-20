@@ -54,7 +54,7 @@ def attention(states_a, states_b_i, state_c, d):
 
 '''
 #with tf.variable_scope('match_lstm'):
-def match(qstates, pstates, d):
+def match(qstates, pstates, d, dropout=None):
 
     # infer batch_size, passage length and question length
     qlen, batch_size, _ = tf.unstack(tf.shape(qstates))
@@ -65,7 +65,7 @@ def match(qstates, pstates, d):
     
     # define rnn cell
     #  TODO : replace with LSTM
-    cell = rcell('lstm', num_units=2*d)
+    cell = rcell('lstm', num_units=2*d, dropout=dropout)
 
     states = tf.TensorArray(dtype=tf.float32, size=plen+1, name='states',
                 clear_after_read=False)

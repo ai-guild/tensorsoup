@@ -56,6 +56,9 @@ class MatchLSTM():
                 dtype=tf.int32, name='labels')
         masks = tf.placeholder(shape=[2, None, None] , 
                 dtype=tf.float32, name='masks')
+        dropout = tf.placeholder(shape=(), dtype=tf.float32, 
+                name='dropout')
+
 
         # expose handle to placeholders
         placeholders = OrderedDict()
@@ -63,25 +66,28 @@ class MatchLSTM():
         placeholders['queries'] = queries
         placeholders['targets'] = targets
         placeholders['masks'] = masks
+        placeholders['dropout'] = dropout
 
         # hidden dim
         d= self.d
 
         # LSTM Preprocessing Layer
         with tf.variable_scope('passage'):
-            pcell = rcell('lstm', num_units=d)
+            pcell = rcell('lstm', num_units=d, dropout=dropout)
             _, pstates = uni_net_dynamic(cell=pcell, inputs=passages, proj_dim=d)
         with tf.variable_scope('query'):
-            qcell = rcell('lstm', d)
+            qcell = rcell('lstm', d, dropout=dropout)
             _, qstates = uni_net_dynamic(cell=qcell, inputs=queries, proj_dim=d)
 
 
         # Match-LSTM Layer
         with tf.variable_scope('mlstm_forward'):
-            _, states_f = match(qstates, pstates, d)
+            _, states_f = match(qstates, pstates, d, 
+                    dropout=dropout)
 
         with tf.variable_scope('mlstm_backward'):
-            _, states_b = match(qstates, tf.reverse(pstates, axis=[0]), d)
+            _, states_b = match(qstates, tf.reverse(pstates, axis=[0]), d, 
+                    dropout=dropout)
 
         # concat forward and backward states
         mlstm_states = tf.concat([states_f, states_b], axis=-1, name='match_lstm_states')

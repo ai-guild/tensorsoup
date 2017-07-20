@@ -11,7 +11,7 @@ def rcell(cell_type, num_units, num_layers=None, dropout=None):
     elif cell_type == 'gru':
         cell_ = rnn.GRUCell(num_units)
 
-    if dropout:
+    if dropout is not None:
         _cell = lambda : rnn.DropoutWrapper(cell_, output_keep_prob=1. - dropout)
 
     if num_layers:
