@@ -31,12 +31,14 @@ class MatchLSTM():
         # optimizer
         self.opt = tf.train.GradientDescentOptimizer(learning_rate=0.001)
 
+
+    def make(self):
         placeholders, logits = self.inference()
         self.loss, self.accuracy= self.compute_loss(placeholders, logits)
+        self.train_op = self.opt.minimize(self.loss)
 
         self.placeholders = list(placeholders.values())
 
-        self.train_op = self.opt.minimize(self.loss)
 
     '''
         Inference 
