@@ -10,7 +10,7 @@ class Trainer(object):
         self.sess = sess
 
 
-    def evaluate(self):
+    def evaluate(self, visualizer=None):
         datasrc = self.datasrc
         batch_size = datasrc.batch_size
         num_examples = datasrc.n['test']
@@ -30,10 +30,18 @@ class Trainer(object):
 
             fetch_data = [model.loss, model.accuracy, model.train_op]
 
+            if visualizer:
+                fetch_data.append(visualizer.summary_op)
+
             results = self.sess.run( fetch_data,
                             feed_dict = build_feed(model.placeholders, bi))
 
             l, acc = results[:2]
+
+            if visualizer:
+                if i % visualizer.interval == 0:
+                    visualizer.eval_log(results[-1], i)
+
 
             avg_loss += l
             avg_acc += acc
@@ -83,7 +91,7 @@ class Trainer(object):
 
                 if visualizer:
                     if i % visualizer.interval == 0:
-                        visualizer.log(results[-1], j)
+                        visualizer.train_log(results[-1], j)
 
                 # accumulate loss, accuracy
                 avg_loss += l
@@ -96,7 +104,7 @@ class Trainer(object):
             
             # eval
             if i and i%eval_interval == 0:
-                self.evaluate()
+                self.evaluate(visualizer)
 
 
     def build_feed_dict_multi(self, ll1, ll2):

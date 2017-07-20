@@ -6,7 +6,8 @@ class Visualizer(object):
     def __init__(self, logdir='./log/', interval=1):
 
         self.logdir = logdir
-        self.writer = tf.summary.FileWriter(self.logdir)
+        self.writer = tf.summary.FileWriter(self.logdir + '/train')
+        self.eval_writer = tf.summary.FileWriter(self.logdir + '/test')
         self.interval = interval
         self.summary_op = None
 
@@ -28,8 +29,11 @@ class Visualizer(object):
     def merge(self):
         self.summary_op = tf.summary.merge_all()
 
-    def log(self, summary, i):
+    def train_log(self, summary, i):
         self.writer.add_summary(summary, i)
+
+    def eval_log(self, summary, i):
+        self.eval_writer.add_summary(summary, i)
 
     def variable_summaries(self, var, name='summaries'):
       """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
