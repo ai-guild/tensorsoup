@@ -4,10 +4,11 @@ import tensorflow as tf
 
 class Trainer(object):
 
-    def __init__(self, sess, model, datasrc, batch_size):
+    def __init__(self, sess, model, datasrc, batch_size, rand=None):
         self.model = model
         self.datasrc = datasrc
         self.sess = sess
+        self.rand = rand
 
 
     def evaluate(self, visualizer=None):
@@ -67,7 +68,7 @@ class Trainer(object):
         # init sess
         sess.run(tf.global_variables_initializer())
         
-        num_examples = datasrc.n['train']
+        num_examples = datasrc.n['train'] * datasrc.random_x if self.rand else datasrc.n['train']
         num_iterations = int(num_examples/(batch_size*n))
 
         build_feed = self.build_feed_dict if n == 1 else self.build_feed_dict_multi
@@ -76,7 +77,10 @@ class Trainer(object):
             avg_loss, avg_acc = 0., 0.
             datasrc.i = 0 # point to start index
             for j in tq(range(num_iterations)):
-                bj = datasrc.next_batch(n, 'train')
+
+                next_batch = datasrc.next_random_batch if self.rand else datasrc.next_batch
+
+                bj = next_batch(n, 'train')
 
                 # fetch items
                 fetch_data = [model.loss, model.accuracy, model.train_op]

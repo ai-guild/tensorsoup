@@ -11,7 +11,8 @@ from nltk import word_tokenize
 class DataSource(object):
 
     def __init__(self, batch_size, datadir='../../../datasets/SQuAD/',
-            glove_file='../../../datasets/glove/glove.6B.100d.txt'):
+            glove_file='../../../datasets/glove/glove.6B.100d.txt', 
+            random_x=None):
 
         # 100d -> glove_file='datasets/glove/glove.6B.100d.txt'):
         # 200d -> glove_file='datasets/glove/glove.6B.200d.txt'):
@@ -51,8 +52,19 @@ class DataSource(object):
         # list of batch id's
         #  to sample from
         self.batches = {}
-        self.batches['train'] = list(range(self.n['train']))
-        self.batches['test'] = list(range(self.n['test']))
+        self.batches['train'] = list(range(self.n['train']//self.batch_size))
+        self.batches['test'] = list(range(self.n['test']//self.batch_size))
+
+        self.rand_batches = []
+        self.random_x = random_x
+
+
+
+    def new_rand_batches(self):
+        idx = self.batches['train']
+        num_examples = int(len(idx)*self.random_x)
+        random.shuffle(idx)
+        self.rand_batches = idx[:num_examples]
 
 
     def process(self, datadir='datasets/SQuAD/'):
@@ -175,15 +187,21 @@ class DataSource(object):
         return bi_n
 
 
-    def next_n_random_batches(self, n, dtype='train'):
-        batches = random.sample(self.batches)
+    def next_random_batch(self, n, dtype='train'):
+        if self.i == 0 or self.i > int((self.n[dtype]/self.batch_size) * self.random_x):
+            self.new_rand_batches()
+            self.i == 0
+
+        if n == 1:
+            self.i == self.i + 1
+            return self.batch(dtype, self.rand_batches[self.i-1], 
+                    batch_size=self.batch_size)
         bi_n = []
-        for _ in range(n):
-            bi_n.append(self.batch(dtype, self.i, batch_size=self.batch_size))
-            if self.i < self.n[dtype]//self.batch_size:
-                self.i = self.i + 1
-            else:
-                self.i = 0
+        for j in range(n):
+            bi_n.append(self.batch(dtype, self.rand_batches[j], batch_size=self.batch_size))
+            self.i = self.i + 1
+
+        assert len(bi_n) > 0
         return bi_n
 
 
