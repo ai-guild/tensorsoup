@@ -8,6 +8,7 @@ from tasks.squad.data import DataSource
 from train.trainer import Trainer
 
 from multigpu import make_parallel
+from visualizer import Visualizer
 
 
 if __name__ == '__main__':
@@ -20,8 +21,17 @@ if __name__ == '__main__':
     # make 'n' copies of model for data parallelism
     make_parallel(model, num_copies=8, num_gpus=4)
 
+    # setup visualizer
+    #  by default, writes to ./log/
+    vis = Visualizer(interval=50)
+    vis.attach_scalars(model)
+    vis.attach_params() # histograms of trainable variables
+
+
     # create data source (SQuAD)
-    datasrc = DataSource(batch_size, glove_file='../../../datasets/glove/glove.6B.300d.txt')
+    datasrc = DataSource(batch_size, 
+            glove_file='../../../datasets/glove/glove.6B.300d.txt', 
+            random_x=0.3)
 
     # gpu config
     config = tf.ConfigProto()
@@ -31,8 +41,10 @@ if __name__ == '__main__':
         # init session
         sess.run(tf.global_variables_initializer())
 
+        vis.attach_graph(sess.graph)
+
         # init trainer
-        trainer = Trainer(sess, model, datasrc, batch_size)
+        trainer = Trainer(sess, model, datasrc, batch_size, rand=True)
 
         # fit model
-        trainer.fit(epochs=1000)
+        trainer.fit(epochs=1000, visualizer=vis)
