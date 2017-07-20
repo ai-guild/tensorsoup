@@ -13,13 +13,13 @@ from visualizer import Visualizer
 
 if __name__ == '__main__':
     
-    batch_size = 30
+    batch_size = 90
 
     # instantiate model
-    model = MatchLSTM(emb_dim=300, hidden_dim=200)
+    model = MatchLSTM(emb_dim=300, hidden_dim=200, lr=0.0005)
 
     # make 'n' copies of model for data parallelism
-    make_parallel(model, num_copies=8, num_gpus=4)
+    make_parallel(model, num_copies=4, num_gpus=4)
 
     # setup visualizer
     #  by default, writes to ./log/
@@ -31,7 +31,7 @@ if __name__ == '__main__':
     # create data source (SQuAD)
     datasrc = DataSource(batch_size, 
             glove_file='../../../datasets/glove/glove.6B.300d.txt', 
-            random_x=0.3)
+            random_x=0.2)
 
     # gpu config
     config = tf.ConfigProto()
