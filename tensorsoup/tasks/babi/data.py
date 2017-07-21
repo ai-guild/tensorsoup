@@ -1,7 +1,5 @@
 import numpy as np
-
-from sklearn import cross_validation, metrics
-
+import random
 from itertools import chain
 from six.moves import range, reduce
 
@@ -18,20 +16,19 @@ class DataSource(object):
 
         #if os.path.isfile(datadir + '/data.train'):
         # load data
-        data_all, metadata  = self.fetch(task_id, datadir)
+        data_all, metadata  = self.fetch()
+            
         self.metadata = metadata
 
         self.data = {}
 
         # convenience dict
         self.data['train'] = [ data_all['trS'], data_all['trQ'], data_all['trA'] ]
-        self.data['valid'] = [ data_all['vaS'], data_all['vaQ'], data_all['vaA'] ]
         self.data['test'] = [ data_all['teS'], data_all['teQ'], data_all['teA'] ]
 
         # num of examples
         self.n = {}
         self.n['train'] = len(self.data['train'][0])
-        self.n['valid'] = len(self.data['valid'][0])
         self.n['test']  = len(self.data['test'][0])
 
         # current iteration
@@ -51,13 +48,29 @@ class DataSource(object):
             self.i = 0
         return bi
 
-    def fetch(self, task_id, datadir):
+    def fetch(self):
+        
+        def load_all_tasks(data_dir):
+            train_data, test_data = [], []
+            for i in range(1,21):
+                train, test = load_task(data_dir, i)
+                train_data.extend(train)
+                test_data.extend(test)
 
+            random.shuffle(train_data)
+            random.shuffle(test_data)
+            
+            return train_data, test_data
+        
         # data directory
-        datadir = datadir #+ '/en-10k/'
+        datadir = self.datadir #+ '/en-10k/'
         # task data
-        train, test = load_task(datadir, task_id)
+        if self.task_id > 0:
+            train, test = load_task(datadir, task_id)
+        else:
+            train, test = load_all_tasks(datadir)
         data = train + test
+        print('data len', len(data))
 
         # metadata
         vocab = sorted(reduce(lambda x, y: x | y, (set(list(chain.from_iterable(s)) + q + a) for s, q, a in data)))
@@ -72,16 +85,13 @@ class DataSource(object):
         vocab_size = len(word_idx) + 1 # +1 for nil word
         sentence_size = max(query_size, sentence_size) # for the position
 
-        # train/validation/test sets
-        S, Q, A = vectorize_data(train, word_idx, sentence_size, memory_size)
-        trainS, valS, trainQ, valQ, trainA, valA = cross_validation.train_test_split(
-                S, Q, A, test_size=.1, random_state=None)
+        # train/test sets
+        trainS, trainQ, trainA = vectorize_data(train, word_idx, sentence_size, memory_size)
         testS, testQ, testA = vectorize_data(test, word_idx, sentence_size, memory_size)
 
         # params
         n_train = trainS.shape[0]
         n_test = testS.shape[0]
-        n_val = valS.shape[0]
 
         batches = zip(range(0, n_train-self.batch_size, self.batch_size), 
                 range(self.batch_size, n_train, self.batch_size))
@@ -94,9 +104,6 @@ class DataSource(object):
             'teS' : testS,
             'teQ' : testQ,
             'teA' : testA,
-            'vaS' : valS,
-            'vaQ' : valQ,
-            'vaA' : valA,
             'batches' : batches
             }
 

@@ -4,12 +4,16 @@ import tensorflow as tf
 
 class Trainer(object):
 
+    PRETRAIN = 0
+    TRAIN = 1
+    TEST = 2
+
     def __init__(self, sess, model, datasrc, batch_size, rand=None):
         self.model = model
         self.datasrc = datasrc
         self.sess = sess
         self.rand = rand
-
+        
 
     def evaluate(self, visualizer=None):
         datasrc = self.datasrc
@@ -34,8 +38,9 @@ class Trainer(object):
             if visualizer:
                 fetch_data.append(visualizer.summary_op)
 
+            feed_dict = self.extra_params(self.TEST, build_feed(model.placeholders, bi))
             results = self.sess.run( fetch_data,
-                            feed_dict = build_feed(model.placeholders, bi))
+                                     feed_dict = feed_dict)
 
             l, acc = results[:2]
 
@@ -50,9 +55,9 @@ class Trainer(object):
         log = 'Evaluation - loss : {}; accuracy : {}'.format(avg_loss/(num_iterations),
                             avg_acc/(num_iterations))
         tqdm.write(log)
+        return avg_loss/num_iterations
 
-
-    def fit(self, epochs, eval_interval=10, verbose=True, visualizer=None):
+    def fit(self, epochs, eval_interval=10, mode=1, verbose=True, visualizer=None):
 
         def tq(x):
             return tqdm(x) if verbose else x
@@ -64,15 +69,12 @@ class Trainer(object):
 
         # num copies of model
         n = model.n
-
-        # init sess
-        sess.run(tf.global_variables_initializer())
         
         num_examples = datasrc.n['train'] * datasrc.random_x if self.rand else datasrc.n['train']
         num_iterations = int(num_examples/(batch_size*n))
 
         build_feed = self.build_feed_dict if n == 1 else self.build_feed_dict_multi
-        
+        loss_trend = []
         for i in range(epochs):
             avg_loss, avg_acc = 0., 0.
             datasrc.i = 0 # point to start index
@@ -87,10 +89,12 @@ class Trainer(object):
 
                 if visualizer:
                     fetch_data.append(visualizer.summary_op)
+                    
+                feed_dict = self.extra_params(mode, build_feed(model.placeholders, bj))
 
                 results = sess.run( fetch_data, 
-                        feed_dict = build_feed(model.placeholders, bj) )
-
+                                    feed_dict = feed_dict)
+                
                 l, acc = results[:2]
 
                 if visualizer:
@@ -108,8 +112,12 @@ class Trainer(object):
             
             # eval
             if i and i%eval_interval == 0:
-                self.evaluate(visualizer)
+                eloss = self.evaluate(visualizer)
+                loss_trend.append(eloss)
 
+                if early_stopping(loss_trend):
+                    tqdm.write('stopping from early stopping')
+                    return
 
     def build_feed_dict_multi(self, ll1, ll2):
         feed_dict = {}
@@ -124,3 +132,17 @@ class Trainer(object):
 
     def build_feed_dict(self, l1, l2):
         return { i:j for i,j in zip(l1,l2)}
+
+    def extra_params(self, mode, feed_dict):
+        feed_dict[self.model.mode] = mode
+        return feed_dict
+
+
+def early_stopping(loss_trend):
+    if len(loss_trend) < 4:
+        return False
+    
+    for p, n in zip(loss_trend[-4:], loss_trend[-3:]):
+        if p > n:
+            return False
+    return True

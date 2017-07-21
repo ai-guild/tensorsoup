@@ -31,12 +31,14 @@ class MemoryNet(object):
 
             # build placeholders
             questions = tf.placeholder(tf.int32, shape=[None, sentence_size], 
-                    name='questions' )
+                                       name='questions' )
             stories = tf.placeholder(tf.int32, shape=[None, memsize, sentence_size],
-                    name='stories' )
+                                     name='stories' )
             answers = tf.placeholder(tf.int32, shape=[None, ],
-                    name='answers' )
+                                    name='answers' )
 
+            mode = tf.placeholder(tf.int32, shape=[], name='mode')
+            
             # expose handle to placeholders
             placeholders = OrderedDict()
             placeholders['questions'] = questions
@@ -82,8 +84,11 @@ class MemoryNet(object):
                     m = tf.reduce_sum(m*encoding, axis=2) + TA[i]
                     c = tf.nn.embedding_lookup(C[i], noisy_stories)
                     c = tf.reduce_sum(c, axis=2) + TC[i]
-                    
-                    p = tf.reduce_sum(m*tf.expand_dims(u[-1], axis=1), axis=-1)
+
+                    score = tf.reduce_sum(m*tf.expand_dims(u[-1], axis=1), axis=-1)
+                    p = tf.cond(mode>0,
+                                lambda : tf.nn.softmax(score),
+                                lambda : score)
                     o = tf.reduce_sum(tf.expand_dims(p, axis=-1)*c, axis=1)
                     u_k = tf.matmul(u[-1], H) + o
                     u.append(u_k)
@@ -120,7 +125,8 @@ class MemoryNet(object):
             self.stories = stories
             self.questions = questions
             self.answers = answers
-
+            self.mode = mode
+            
             self.placeholders = [stories, questions, answers]
 
 
