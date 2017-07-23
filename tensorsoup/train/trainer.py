@@ -18,7 +18,7 @@ class Trainer(object):
     def evaluate(self, visualizer=None):
         datasrc = self.datasrc
         batch_size = datasrc.batch_size
-        num_examples = datasrc.n['test']
+        num_examples = datasrc.getN('test')
         model = self.model
 
         # num copies
@@ -29,7 +29,6 @@ class Trainer(object):
         build_feed = self.build_feed_dict if n == 1 else self.build_feed_dict_multi
 
         avg_loss, avg_acc = 0., 0.
-        datasrc.i = 0 # point to zero index for test
         for i in tqdm(range(num_iterations)):
             bi = datasrc.next_batch(n, 'test')
 
@@ -70,14 +69,13 @@ class Trainer(object):
         # num copies of model
         n = model.n
         
-        num_examples = datasrc.n['train'] * datasrc.random_x if self.rand else datasrc.n['train']
+        num_examples = datasrc.getN('train') * datasrc.random_x if self.rand else datasrc.getN('train')
         num_iterations = int(num_examples/(batch_size*n))
 
         build_feed = self.build_feed_dict if n == 1 else self.build_feed_dict_multi
         loss_trend = []
         for i in range(epochs):
             avg_loss, avg_acc = 0., 0.
-            datasrc.i = 0 # point to start index
             for j in tq(range(num_iterations)):
 
                 next_batch = datasrc.next_random_batch if self.rand else datasrc.next_batch
