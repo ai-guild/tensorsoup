@@ -216,7 +216,7 @@ class DataSource(object):
         datadir = self.datadir #+ '/en-10k/'
         # task data
         if self.task_id > 0:
-            train, test = load_task(datadir, task_id)
+            train, test = load_task(self.datadir, self.task_id)
         else:
             train, test = load_all_tasks(datadir)
         data = train + test
