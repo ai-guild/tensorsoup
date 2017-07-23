@@ -29,6 +29,7 @@ class Trainer(object):
         build_feed = self.build_feed_dict if n == 1 else self.build_feed_dict_multi
 
         avg_loss, avg_acc = 0., 0.
+
         for i in tqdm(range(num_iterations)):
             bi = datasrc.next_batch(n, 'test')
 
@@ -54,7 +55,7 @@ class Trainer(object):
         log = 'Evaluation - loss : {}; accuracy : {}'.format(avg_loss/(num_iterations),
                             avg_acc/(num_iterations))
         tqdm.write(log)
-        return avg_loss/num_iterations
+        return avg_loss/num_iterations, avg_acc/(num_iterations)
 
     def fit(self, epochs, eval_interval=10, mode=1, verbose=True, visualizer=None):
 

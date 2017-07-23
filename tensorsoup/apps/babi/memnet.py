@@ -52,12 +52,12 @@ if __name__ == '__main__':
         print('****************************************************************** PRETRAINING OVER ')
         for task_id in reversed(range(21)):
             datasrc.task_id = task_id
-            loss = trainer.evaluate()
-            print('evaluation loss for task_id = {}\t\tloss = {}'.format(task_id, loss))
+            loss, acc = trainer.evaluate()
+            print('evaluation loss for task_id = {}\t\tloss = {}\t\t accuracy = {}'.format(task_id, loss, acc))
         
         trainer.fit(epochs=600, mode=Trainer.TRAIN, verbose=False, visualizer=vis)
         print('****************************************************************** TRAINING OVER ')
         for task_id in reversed(range(21)):
             datasrc.task_id = task_id
-            loss = trainer.evaluate()
-            print('evaluation loss for task_id = {}\t\tloss = {}'.format(task_id, loss))
+            loss, acc = trainer.evaluate()
+            print('evaluation loss for task_id = {}\t\tloss = {}\t\t accuracy = {}'.format(task_id, loss, acc))
