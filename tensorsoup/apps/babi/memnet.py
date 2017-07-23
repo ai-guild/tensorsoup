@@ -5,7 +5,7 @@ sys.path.append('../../')
 
 from models.memorynet.model import MemoryNet
 from train.trainer import Trainer
-from tasks.babi.data import DataSource
+from tasks.babi.data import DataSource, DataSourceAllTasks
 
 from visualizer import Visualizer
 
@@ -14,7 +14,7 @@ if __name__ == '__main__':
 
     batch_size = 128
 
-    datasrc = DataSource(datadir='../../../datasets/babi/en-10k/', task_id=0,
+    datasrc = DataSourceAllTasks(datadir='../../../datasets/babi/en-10k/', task_id=0,
             batch_size=batch_size)
 
     # get vocab size from data source
@@ -50,6 +50,14 @@ if __name__ == '__main__':
         # fit model
         trainer.fit(epochs=600, mode=Trainer.PRETRAIN, verbose=True, visualizer=vis)
         print('****************************************************************** PRETRAINING OVER ')
-        trainer.fit(epochs=600, mode=Trainer.TRAIN, verbose=False, visualizer=vis)
+        for task_id in reversed(range(21)):
+            datasrc.task_id = task_id
+            loss = trainer.evaluate()
+            print('evaluation loss for task_id = {}\t\tloss = {}'.format(task_id, loss))
         
-
+        trainer.fit(epochs=600, mode=Trainer.TRAIN, verbose=False, visualizer=vis)
+        print('****************************************************************** TRAINING OVER ')
+        for task_id in reversed(range(21)):
+            datasrc.task_id = task_id
+            loss = trainer.evaluate()
+            print('evaluation loss for task_id = {}\t\tloss = {}'.format(task_id, loss))
