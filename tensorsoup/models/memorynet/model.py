@@ -29,16 +29,17 @@ class MemoryNet(object):
 
         def inference():
 
-            # build placeholders
-            questions = tf.placeholder(tf.int32, shape=[None, sentence_size], 
-                                       name='questions' )
-            stories = tf.placeholder(tf.int32, shape=[None, memsize, sentence_size],
-                                     name='stories' )
-            answers = tf.placeholder(tf.int32, shape=[None, ],
-                                    name='answers' )
+            with tf.name_scope('input'):
+                # build placeholders
+                questions = tf.placeholder(tf.int32, shape=[None, sentence_size], 
+                                           name='questions' )
+                stories = tf.placeholder(tf.int32, shape=[None, memsize, sentence_size],
+                                         name='stories' )
 
-            mode = tf.placeholder(tf.int32, shape=[], name='mode')
-            
+                answers = tf.placeholder(tf.int32, shape=[None, ],
+                                         name='answers' )
+                mode = tf.placeholder(tf.int32, shape=[], name='mode')
+                
             # expose handle to placeholders
             placeholders = OrderedDict()
             placeholders['questions'] = questions
