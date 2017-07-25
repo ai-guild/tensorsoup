@@ -3,7 +3,7 @@ import tensorflow as tf
 import sys
 sys.path.append('../../')
 
-from models.memorynet.model import MemoryNet
+from models.memorynet.memn2n import MemoryNet
 from train.trainer import Trainer
 from tasks.babi.data import DataSource, DataSourceAllTasks
 

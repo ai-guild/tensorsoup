@@ -20,23 +20,30 @@ from init import *
     shape(ci)         : [B,d]
 
 '''
-@init
-def attention(ref, query, d):
+def attention(ref, query, d, initializer=None, score=False, prob=False):
 
     # infer timesteps
     batch_size, timesteps, _ = tf.unstack(tf.shape(ref))
 
-    Wa = tf.get_variable('Wa', shape=[d, d], dtype=tf.float32)#, initializer=def_init)
-    Ua = tf.get_variable('Ua', shape=[d, d], dtype=tf.float32)#, initializer=def_init)
-    Va = tf.get_variable('Va', shape=[d, 1], dtype=tf.float32)#, initializer=def_init)
+    Wa = tf.get_variable('Wa', shape=[d, d], dtype=tf.float32, initializer=initializer)
+    Ua = tf.get_variable('Ua', shape=[d, d], dtype=tf.float32, initializer=initializer)
+    Va = tf.get_variable('Va', shape=[d, 1], dtype=tf.float32, initializer=initializer)
 
     # s_ij -> [B,L,d]
     a = tf.tanh(tf.expand_dims(tf.matmul(query, Wa), axis=1) + 
             tf.reshape(tf.matmul(tf.reshape(ref, [-1, d]), Ua), [-1, timesteps, d]))
     # e_ij -> softmax(aV_a) : [B, L]
-    scores = tf.nn.softmax(tf.reshape(tf.matmul(tf.reshape(a, [-1, d]), Va), [-1, timesteps]))
+    scores = tf.reshape(tf.matmul(tf.reshape(a, [-1, d]), Va), [-1, timesteps])
+
+    probs = tf.nn.softmax(scores)
+
+    if score:
+        return scores
+    elif prob:
+        return probs
+
     # c_i -> weighted sum of encoder states
-    return tf.reduce_sum(ref*tf.expand_dims(scores, axis=-1), axis=1) # [B, d]    
+    return tf.reduce_sum(ref*tf.expand_dims(probs, axis=-1), axis=1) # [B, d]    
 
 
 

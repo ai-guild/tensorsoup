@@ -2,17 +2,18 @@ import tensorflow as tf
 import numpy as np
 
 import sys
-sys.path.append('../')
+sys.path.append('../../')
 
+from attention import attention
 from sanity import *
 
 from collections import OrderedDict
 
 
-class MemoryNet(object):
+class GoldilocksMemNet():
 
     def __init__(self, hdim, num_hops, memsize, sentence_size, 
-                 vocab_size, lr=0.01):
+            vocab_size, lr=0.025):
 
         # reset graph
         tf.reset_default_graph()
@@ -25,33 +26,29 @@ class MemoryNet(object):
 
         #optimizer = tf.train.AdagradOptimizer(learning_rate=lr)
         optimizer = tf.train.AdamOptimizer(learning_rate=lr)
-
+        
 
         def inference():
 
             with tf.name_scope('input'):
-                # build placeholders
-                questions = tf.placeholder(tf.int32, shape=[None, sentence_size], 
-                                           name='questions' )
-                stories = tf.placeholder(tf.int32, shape=[None, memsize, sentence_size],
-                                         name='stories' )
 
-                answers = tf.placeholder(tf.int32, shape=[None, ],
-                                         name='answers' )
-                mode = tf.placeholder(tf.int32, shape=[], name='mode')
-                
+                # placeholders
+                questions = tf.placeholder(tf.int32, shape=[None, sentence_size], 
+                        name='questions' )
+                stories = tf.placeholder(tf.int32, shape=[None, memsize, sentence_size], 
+                        name='stories' )
+                answers = tf.placeholder(tf.int32, shape=[None, ], 
+                        name='answers' )
+                candidates = tf.placeholder(tf.int32, shape=[None, 10], 
+                        name='candidates' )
+                mode = tf.placeholder(tf.int32, shape=(), name='mode')
+
             # expose handle to placeholders
             placeholders = OrderedDict()
             placeholders['questions'] = questions
             placeholders['stories'] = stories
             placeholders['answers'] = answers
-
-            # inject noise to memories
-            dropout = tf.random_normal([memsize, 1], mean=0) > -2
-            noisy_stories = stories * tf.cast(dropout, tf.int32)
-            noisy_stories = tf.reverse(noisy_stories, axis=[1])
-            # position encoding
-            encoding = tf.constant(self.position_encoding(sentence_size, hdim))
+            placeholders['candidates'] = candidates
 
             # embedding
             with tf.name_scope('embeddings'):
@@ -62,10 +59,13 @@ class MemoryNet(object):
                 C = tf.get_variable('C', shape=[num_hops, vocab_size, hdim], dtype=tf.float32, 
                                    initializer=self.init)
 
+            # Position encoding
+            encoding = tf.constant(self.position_encoding(sentence_size, hdim))
+
             with tf.name_scope('question'):
-                # embed questions
+                # Embed Questions (B)
                 u0 = tf.nn.embedding_lookup(B, questions)
-                u0 = tf.reduce_sum(u0*encoding, axis=1)
+                u0 = tf.reduce_sum(u0 * encoding, axis=1)
                 u = [u0] # accumulate question emb
 
             with tf.name_scope('temporal'):
@@ -81,9 +81,9 @@ class MemoryNet(object):
                 # memory loop
                 for i in range(num_hops):
                     # embed stories
-                    m = tf.nn.embedding_lookup(A[i], noisy_stories)
+                    m = tf.nn.embedding_lookup(A[i], stories)
                     m = tf.reduce_sum(m*encoding, axis=2) + TA[i]
-                    c = tf.nn.embedding_lookup(C[i], noisy_stories)
+                    c = tf.nn.embedding_lookup(C[i], stories)
                     c = tf.reduce_sum(c, axis=2) + TC[i]
 
                     score = tf.reduce_sum(m*tf.expand_dims(u[-1], axis=1), axis=-1)
@@ -94,11 +94,14 @@ class MemoryNet(object):
                     u_k = tf.matmul(u[-1], H) + o
                     u.append(u_k)
 
-            with tf.name_scope('output'):
-                # answer selection
-                W = tf.get_variable('W', dtype=tf.float32, shape=[hdim, vocab_size],
-                                   initializer=self.init)
-                logits = tf.matmul(u[-1], W)
+
+            with tf.name_scope('answer'):
+                cand_emb = tf.nn.embedding_lookup(B, candidates)
+                logits = attention(cand_emb, u[-1], d=hdim, score=True,
+                        initializer=self.init)
+                probs = tf.nn.softmax(logits)
+                # prediction
+                self.prediction = tf.argmax(probs)
 
             with tf.name_scope('loss'):
                 # optimization
@@ -111,10 +114,10 @@ class MemoryNet(object):
 
             with tf.name_scope('evaluation'):
                 # evaluation
-                probs = tf.nn.softmax(logits)
                 correct_labels = tf.equal(tf.cast(answers, tf.int64), tf.argmax(probs, axis=-1))
                 accuracy = tf.reduce_mean(tf.cast(correct_labels, tf.float32))
 
+            # optimization
             with tf.name_scope('optimization'):
                 # gradient clipping
                 gvs = optimizer.compute_gradients(loss)
@@ -126,11 +129,12 @@ class MemoryNet(object):
             self.stories = stories
             self.questions = questions
             self.answers = answers
+            self.candidates = candidates
             self.mode = mode
             
-            self.placeholders = [stories, questions, answers]
+            self.placeholders = [stories, questions, answers, candidates]
 
-
+        # execute and build graph
         inference()
 
 
@@ -143,12 +147,60 @@ class MemoryNet(object):
             for j in range(1, ls):
                 encoding[i-1, j-1] = (i - (le-1)/2) * (j - (ls-1)/2)
         encoding = 1 + 4 * encoding / embedding_size / sentence_size
+        
         return np.transpose(encoding)
 
+
+    '''
+        clean up and organize the methods below
+
+    def hard_mem_access(self, probs, c):
+        m_max_id = tf.cast(tf.argmax(probs, axis=1), dtype=tf.int32)
+        range_ = tf.range(start=0, limit=tf.shape(m_max_id)[0])
+        m_idx = tf.stack([range_, m_max_id], axis=1)
+        return tf.gather_nd(c, m_idx)
+
+    def soft_mem_access(self, probs, c):
+        #c_o = tf.transpose(c, [0, 2, 1])*probs
+        c_o = tf.transpose(c, [0, 2, 1])*tf.expand_dims(probs, axis=1)
+        return tf.reduce_sum(c_o, axis=-1)
+
+    def self_supervision(self, match_scores):
+        # Self-Supervision
+        loss = tf.nn.softmax_cross_entropy_with_logits(
+                logits=match_scores, labels=self.window_targets)
+        loss = tf.reduce_mean(loss)
+        mem_train_op = self.mem_optimizer.minimize(loss)
+        # attach to class
+        self.mem_train_op = mem_train_op
+        self.self_sup_loss = loss
+
+    def answer_select(self, C, W, u):
+        cand_emb = tf.nn.embedding_lookup(C, self.candidates)
+        u_proj = tf.matmul(u, W)
+        bilinear = cand_emb * tf.expand_dims(u_proj, axis=1)
+        logits = tf.reduce_sum(bilinear, axis=2)
+        a = tf.nn.softmax(logits)
+        return logits, a
+
+    def optimize(self, logits, lr):
+        ce_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits,
+                                                                labels=self.answers)
+        self.loss = tf.reduce_mean(ce_loss)
+        self.train_op = self.optimizer.minimize(self.loss)
+    '''
 
 
 if __name__ == '__main__':
 
-    memnet = MemoryNet(num_hops=3, hdim=150, vocab_size=1000, lr=0.001)
-
-    print(sanity([memnet.loss, memnet.train_op]))
+    # create model
+    print('> Create model')
+    model = GoldilocksMemNet(hdim= 20, # embedding dimension
+                             num_hops=3,
+                             memsize=5,
+                             sentence_size= 10, # max sentence len
+                             vocab_size= 100,
+                             lr=0.025,
+                             )
+    #print(sanity([model.prediction], fetch_data=True))
+    # sanity check : success
