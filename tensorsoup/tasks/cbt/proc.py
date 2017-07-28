@@ -1,6 +1,12 @@
+from tests import *
+
+
 BASE_PATH = '../../../datasets/CBTest/data'
-TRAIN_FILE = 'cbtest_NE_train.txt'
-VALID_FILE = 'cbtest_NE_valid_2000ex.txt'
+
+TYPE_VERB = 'V'
+TYPE_PREP = 'P'
+TYPE_NOUN = 'CN'
+TYPE_NE = 'NE'
 
 
 def _read_sample(n, samples):
@@ -60,11 +66,11 @@ def fetch_data(path):
 
 
 def is_word(w):
-'''
-    is_word(str : w) -> Boolean
-        if a word contains 
-         at least 1 alphanumeric char
-'''
+    '''
+        is_word(str : w) -> Boolean
+            if a word contains 
+             at least 1 alphanumeric char
+    '''
     return len([ch for ch in w if int(ch.isalnum()) ]) >  0
 
 
@@ -107,12 +113,12 @@ def preprocess(raw_dataset):
 
     # preprocessing
     for i, data in enumerate([stories, queries, answers]):
-        print(':: > [{}/3] preprocessing text'.format(i))
+        print(':: <preprocess> [{}/3] preprocessing text'.format(i))
         processed.append([ preprocess_text(item) 
             for item in data ])
 
     # preprocess candidates
-    print(':: > [0/1] preprocessing candidates')
+    print(':: <preprocess> [0/1] preprocessing candidates')
     candidates = [ preprocess_candidates(c) for c in candidates ]
 
 
@@ -123,17 +129,14 @@ def preprocess(raw_dataset):
 
     dataset['candidates'] = candidates
 
-    print(':: > preprocessing complete; returning dataset')
+    print(':: <preprocess> preprocessing complete; returning dataset')
     return dataset
 
 
-def build_vocabulary(dataset):
-    # get stories and queries
-    stories, queries = dataset['stories'], dataset['queries']
-
+def build_vocabulary(texts):
     # combine stories and queries
     #  into a text blob
-    text = ' '.join(stories + queries)
+    text = ' '.join(texts)
     
     # get all words
     words = text.split(' ')
@@ -142,38 +145,16 @@ def build_vocabulary(dataset):
     return sorted(list(set(words)))
 
 
-def test_vocabulary(vocab, dataset):
-    answers, candidates = dataset['answers'], dataset['candidates']
-
-    # flatten candidates and get unique words
-    candidates = list(set([ci for c in candidates for ci in c]))
-    # repeat for answers
-    answers = list(set(answers))
-
-    # check if all answers exist in candidates
-    assert len([ w for w in answers if w not in candidates ]) == 0
-
-    # check if all candidates exist in vocabulary
-    assert len([ w for w in candidates if w not in vocab ]) == 0
-
-    return vocab
-
-
-def test_preprocessed_dataset(dataset):
-
-    # len check
-    dlens = [ len(di) for di in list(dataset.values()) ]
-    assert max(dlens) == min(dlens)
-
-    # shape check
-    #  answers
-    alens = [ len(ai.split(' ')) for ai in dataset['answers'] ]
-    assert max(alens) == min(alens) == 1
-
-    # shape check
-    #  candidates
-    clens = [ len(ci) for ci in dataset['candidates'] ]
-    assert max(clens) == min(clens) == 10
+def gather_metadata(data, vocab):
+    # assumption : max story/query len of training set is larger than test/valid
+    #  i'm sure this will come back to bite me in the ass
+    return {
+            'max_story_len' : max([len(s.split(' ')) for s in data['stories']]),
+            'max_query_len' : max([len(q.split(' ')) for q in data['queries']]),
+            'w2i' : { w:i for i,w in enumerate(vocab) },
+            'i2w' : vocab,
+            'vocab_size' : len(vocab)
+            }
 
 
 def story2windows(story, candidates, window_size):
@@ -204,44 +185,64 @@ def build_windows(dataset, window_size):
             zip(dataset['stories'], dataset['candidates']) ]
 
 
-def test_windows(windows, window_size):
-    # shape check
-    wlens = [len(wj) for wi in windows for wj in wi]
-    assert max(wlens) == min(wlens) == window_size
+def process(tag=TYPE_NE, run_tests=True):
+    # build file names
+    train_file = 'cbtest_{}_train.txt'.format(tag)
+    valid_file = 'cbtest_{}_valid_2000ex.txt'.format(tag)
+    test_file = 'cbtest_{}_test_2500ex.txt'.format(tag)
+
+    # process files
+    print(':: [1/3] Fetch train data')
+    train = process_file(train_file)
+    print(':: [2/3] Fetch valid data')
+    valid = process_file(valid_file)
+    print(':: [2/3] Fetch test data')
+    test  = process_file(test_file)
+
+    texts = []
+    for data in [train, test, valid]:
+        texts.extend(data['stories'])
+        texts.extend(data['queries'])
+
+    # build vocabulary
+    vocab = build_vocabulary(texts)
+
+    if run_tests:
+        print(':: <test> [1/1] Test vocabulary')
+        for data in [train, test, valid]:
+            test_vocabulary(vocab, data)
+
+    # metadata
+    metadata = gather_metadata(train, vocab)
 
 
-def process():
-    print(':: [0/7] Fetch data from file')
+    return { 'train' : train, 'test' : test, 
+            'valid' : valid }, metadata
+
+
+def process_file(filename, run_tests=True):
     # fetch data from file
-    dataset = fetch_data(BASE_PATH + '/' + TRAIN_FILE)
+    print(':: <proc> [1/3] Fetch data from file')
+    data = fetch_data(BASE_PATH + '/' + filename)
 
-    print(':: [1/7] Preprocess data')
-    dataset = preprocess(dataset)
+    print(':: <proc> [2/3] Preprocess data')
+    data = preprocess(data)
 
-    print(':: [2/7] test preprocessed data')
-    test_preprocessed_dataset(dataset)
+    print(':: <proc> [3/3] Get windows')
+    windows = build_windows(data, window_size=5)
 
-    print(':: [3/7] Build vocabulary')
-    vocab = build_vocabulary(dataset)
+    if run_tests:
+        print(':: <test> [1/2] Test preprocessed data')
+        test_preprocessed_dataset(data)
 
-    print(':: [4/7] test vocabulary')
-    test_vocabulary(vocab, dataset)
-
-    print(':: [5/7] Get windows')
-    windows = build_windows(dataset, window_size=5)
-
-    print(':: [6/7] Test windows')
-    test_windows(windows, window_size=5)
+        print(':: <test> [2/2] Test windows')
+        test_windows(windows, window_size=5)
 
     # integrate windows to dataset
-    dataset['windows'] = windows
+    data['windows'] = windows
 
-    # create metadata
-    metadata = { 'vocab' : vocab }
-
-    print(':: [7/7] Return data and metadata')
-    return dataset, metadata
+    return data
 
 
 if __name__ == '__main__':
-    dataset, metadata = process()
+    data, metadata = process(TYPE_VERB)
