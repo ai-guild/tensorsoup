@@ -1,3 +1,6 @@
+import pickle
+import os
+
 from tests import *
 
 
@@ -113,12 +116,12 @@ def preprocess(raw_dataset):
 
     # preprocessing
     for i, data in enumerate([stories, queries, answers]):
-        print(':: <preprocess> [{}/3] preprocessing text'.format(i))
+        print(':: <preprocess> [{}/3] preprocessing text'.format(i+1))
         processed.append([ preprocess_text(item) 
             for item in data ])
 
     # preprocess candidates
-    print(':: <preprocess> [0/1] preprocessing candidates')
+    print(':: <preprocess> [1/1] preprocessing candidates')
     candidates = [ preprocess_candidates(c) for c in candidates ]
 
 
@@ -185,19 +188,19 @@ def build_windows(dataset, window_size):
             zip(dataset['stories'], dataset['candidates']) ]
 
 
-def process(tag=TYPE_NE, run_tests=True):
+def process(tag=TYPE_NE, run_tests=True, serialize_data=True, window_size=None):
     # build file names
     train_file = 'cbtest_{}_train.txt'.format(tag)
     valid_file = 'cbtest_{}_valid_2000ex.txt'.format(tag)
     test_file = 'cbtest_{}_test_2500ex.txt'.format(tag)
 
     # process files
-    print(':: [1/3] Fetch train data')
-    train = process_file(train_file)
-    print(':: [2/3] Fetch valid data')
-    valid = process_file(valid_file)
-    print(':: [2/3] Fetch test data')
-    test  = process_file(test_file)
+    print(':: [1/3] Fetch TRAIN data')
+    train = process_file(train_file, window_size)
+    print(':: [2/3] Fetch VALID data')
+    valid = process_file(valid_file, window_size)
+    print(':: [3/3] Fetch TEST Data')
+    test  = process_file(test_file, window_size)
 
     texts = []
     for data in [train, test, valid]:
@@ -215,12 +218,42 @@ def process(tag=TYPE_NE, run_tests=True):
     # metadata
     metadata = gather_metadata(train, vocab)
 
+    data = { 'train' : train, 'test' : test, 
+            'valid' : valid }
 
-    return { 'train' : train, 'test' : test, 
-            'valid' : valid }, metadata
+    # serialize data
+    if serialize_data:
+        print(':: [1/1] Serialize data and metadata')
+        with open('{}/data.{}'.format(BASE_PATH, tag), 'wb') as handle:
+            pickle.dump(data, handle, pickle.HIGHEST_PROTOCOL)
+        with open('{}/metadata.{}'.format(BASE_PATH, tag), 'wb') as handle:
+            pickle.dump(metadata, handle, pickle.HIGHEST_PROTOCOL)
+
+    return data, metadata
 
 
-def process_file(filename, run_tests=True):
+def gather(tag=TYPE_NE, window_size=None):
+    # build file names
+    dataf = '{}/data.{}'.format(BASE_PATH, tag)
+    metadataf = '{}/metadata.{}'.format(BASE_PATH, tag)
+
+    # if processed files exist
+    #  read pickle and return
+    if os.path.isfile(dataf) and os.path.isfile(metadataf):
+        print(':: <gather> [1/2] Reading from' , dataf)
+        with open(dataf, 'rb') as handle:
+            data = pickle.load(handle)
+        print(':: <gather> [2/2] Reading from' , metadataf)
+        with open(metadataf, 'rb') as handle:
+            metadata = pickle.load(handle)
+        return data, metadata
+
+    # else
+    #  process raw data and return
+    return process(tag, window_size)
+
+
+def process_file(filename, run_tests=True, window_size=None):
     # fetch data from file
     print(':: <proc> [1/3] Fetch data from file')
     data = fetch_data(BASE_PATH + '/' + filename)
@@ -228,21 +261,27 @@ def process_file(filename, run_tests=True):
     print(':: <proc> [2/3] Preprocess data')
     data = preprocess(data)
 
-    print(':: <proc> [3/3] Get windows')
-    windows = build_windows(data, window_size=5)
+    if window_size:
+        print(':: <proc> [3/3] Get windows')
+        windows = build_windows(data, window_size=5)
+
+        # integrate windows to dataset
+        data['windows'] = windows
+
 
     if run_tests:
         print(':: <test> [1/2] Test preprocessed data')
         test_preprocessed_dataset(data)
 
-        print(':: <test> [2/2] Test windows')
-        test_windows(windows, window_size=5)
-
-    # integrate windows to dataset
-    data['windows'] = windows
+        if window_size:
+            print(':: <test> [2/2] Test windows')
+            test_windows(windows, window_size=5)
 
     return data
 
 
 if __name__ == '__main__':
-    data, metadata = process(TYPE_VERB)
+    #data, metadata = gather(TYPE_VERB)
+    #data, metadata = gather(TYPE_PREP, window_size=None)
+    #data, metadata = gather(TYPE_NE)
+    data, metadata = gather(TYPE_NOUN)
