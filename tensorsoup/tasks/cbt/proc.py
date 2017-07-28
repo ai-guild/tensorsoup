@@ -187,6 +187,28 @@ def build_windows(dataset, window_size):
     return [ story2windows(s,c, window_size) for s,c in 
             zip(dataset['stories'], dataset['candidates']) ]
 
+def index(data, metadata):
+    # word to index dictionary
+    w2i = metadata['w2i']
+
+    def sent2indices(sent):
+        return [ w2i[w] for w in sent.split(' ') ]
+
+    def words2indices(words):
+        return [ w2i[w] for w in words ]
+
+    indexed_data =  {
+            'stories' : [ sent2indices(s) for s in data['stories'] ],
+            'queries' : [ sent2indices(q) for q in data['queries'] ],
+            'candidates' : [ words2indices(c) for c in data['candidates'] ],
+            'answers' : [ w2i[a] for a in data['answers'] ]
+            }
+
+    if 'windows' in data:
+        indexed_data['windows'] = [ words2indices(wi) for wi in data['windows'] ]
+
+    return indexed_data
+
 
 def process(tag=TYPE_NE, run_tests=True, serialize_data=True, window_size=None):
     # build file names
@@ -217,9 +239,14 @@ def process(tag=TYPE_NE, run_tests=True, serialize_data=True, window_size=None):
 
     # metadata
     metadata = gather_metadata(train, vocab)
+    # add window info in metadata
+    metadata['window_size'] = window_size 
 
-    data = { 'train' : train, 'test' : test, 
-            'valid' : valid }
+    print(':: [1/1] Index data')
+    data = { 'train' : index(train, metadata),
+             'test'  : index(test,  metadata),
+             'valid' : index(valid, metadata)
+             }
 
     # serialize data
     if serialize_data:
@@ -281,7 +308,7 @@ def process_file(filename, run_tests=True, window_size=None):
 
 
 if __name__ == '__main__':
-    #data, metadata = gather(TYPE_VERB)
-    #data, metadata = gather(TYPE_PREP, window_size=None)
-    #data, metadata = gather(TYPE_NE)
+    data, metadata = gather(TYPE_VERB)
+    data, metadata = gather(TYPE_PREP, window_size=None)
+    data, metadata = gather(TYPE_NE)
     data, metadata = gather(TYPE_NOUN)
