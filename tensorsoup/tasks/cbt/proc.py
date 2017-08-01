@@ -2,7 +2,10 @@ import numpy as np
 import pickle
 import os
 
-from tests import *
+import sys
+sys.path.append('../../')
+
+from tasks.cbt.tests import *
 
 
 BASE_PATH = '../../../datasets/CBTest/data'
@@ -12,6 +15,9 @@ TYPE_PREP = 'P'
 TYPE_NOUN = 'CN'
 TYPE_NE = 'NE'
 
+# special tokens
+UNK = '<unk>'
+PAD = '<pad>'
 
 def _read_sample(n, samples):
     '''
@@ -138,7 +144,8 @@ def preprocess(raw_dataset):
 
 
 def build_vocabulary(texts):
-    # combine stories and queries
+
+    # combine windows and queries
     #  into a text blob
     text = ' '.join(texts)
     
@@ -146,7 +153,7 @@ def build_vocabulary(texts):
     words = text.split(' ')
 
     # get unique words -> vocab
-    return sorted(list(set(words)))
+    return [PAD, UNK] + sorted(list(set(words)))
 
 
 def gather_metadata(data, vocab):
@@ -157,7 +164,8 @@ def gather_metadata(data, vocab):
             'max_query_len' : max([len(q.split(' ')) for q in data['queries']]),
             'w2i' : { w:i for i,w in enumerate(vocab) },
             'i2w' : vocab,
-            'vocab_size' : len(vocab)
+            'vocab_size' : len(vocab),
+            'memory_size' : max([len(wi) for wi in data['windows']])
             }
 
 
@@ -207,17 +215,15 @@ def index(data, metadata):
     # word to index dictionary
     w2i = metadata['w2i']
 
-    def sent2indices(sent):
-        return [ w2i[w] for w in sent.split(' ') ]
-
     def words2indices(words):
-        return [ w2i[w] for w in words ]
+        return [ w2i[w] if w in w2i else w2i[UNK] for w in words ]
 
     indexed_data =  {
-            'stories' : [ sent2indices(s) for s in data['stories'] ],
-            'queries' : [ sent2indices(q) for q in data['queries'] ],
+            'queries' : [ words2indices(q.split(' ')) for q in data['queries'] ],
             'candidates' : [ words2indices(c) for c in data['candidates'] ],
-            'answers' : [ w2i[a] for a in data['answers'] ]
+            'answers' : [ c.index(a) for a,c in 
+                zip(data['answers'], data['candidates']) ]
+            #'answers' : [ w2i[a] for a in data['answers'] ]
             }
 
     if 'windows' in data:
@@ -234,7 +240,41 @@ def index(data, metadata):
     return indexed_data
 
 
-def process(path=BASE_PATH, tag=TYPE_NE, run_tests=True, serialize_data=True, window_size=None):
+def filter_by_num_windows(idata, n=40):
+    data = {}
+    for k,v in idata.items():
+        data[k] = []
+        for i, item in enumerate(idata[k]):
+            if len(idata['windows'][i]) <= n:
+                data[k].append(item)
+
+    return data
+        
+
+def filter_by(idata, cond):
+    data = {}
+    for k,v in idata.items():
+        data[k] = []
+        for i, item in enumerate(idata[k]):
+            if cond(idata, i):
+                data[k].append(item)
+    return data
+ 
+
+def filter_data(idata, num_windows=30, qlen=40):
+
+    data = filter_by(idata, 
+            lambda d, i : len(d['windows'][i]) <= num_windows)
+    data = filter_by(data,
+            lambda d, i : len(d['queries'][i].split(' ')) <= qlen)
+
+    print(':: <filter> Selected {}% from original data'.format(
+        100. * len(data['queries'])/len(idata['queries'])))
+
+    return data
+
+
+def process(path=BASE_PATH, tag=TYPE_NE, run_tests=False, serialize_data=True, window_size=5):
     # build file names
     train_file = 'cbtest_{}_train.txt'.format(tag)
     valid_file = 'cbtest_{}_valid_2000ex.txt'.format(tag)
@@ -250,11 +290,17 @@ def process(path=BASE_PATH, tag=TYPE_NE, run_tests=True, serialize_data=True, wi
 
     texts = []
     for data in [train, test, valid]:
-        texts.extend(data['stories'])
+        texts.extend([ ' '.join(w) for windows in data['windows']
+            for w in windows])
         texts.extend(data['queries'])
+        texts.extend([ ' '.join(c) for candidates in data['candidates']
+            for c in candidates])
+        texts.extend(data['answers'])
 
     # build vocabulary
+    print(':: [1/2] build vocabulary')
     vocab = build_vocabulary(texts)
+    print(':: [2/2] vocabulary size', len(vocab))
 
     if run_tests:
         print(':: <test> [1/1] Test vocabulary')
@@ -265,6 +311,7 @@ def process(path=BASE_PATH, tag=TYPE_NE, run_tests=True, serialize_data=True, wi
     metadata = gather_metadata(train, vocab)
     # add window info in metadata
     metadata['window_size'] = window_size 
+
 
     print(':: [1/1] Index data')
     data = { 'train' : index(train, metadata),
@@ -283,7 +330,7 @@ def process(path=BASE_PATH, tag=TYPE_NE, run_tests=True, serialize_data=True, wi
     return data, metadata
 
 
-def gather(path=BASE_PATH, tag=TYPE_NE, window_size=None):
+def gather(path=BASE_PATH, tag=TYPE_NE, window_size=5):
     # build file names
     dataf = '{}/data.{}'.format(path, tag)
     metadataf = '{}/metadata.{}'.format(path, tag)
@@ -301,7 +348,7 @@ def gather(path=BASE_PATH, tag=TYPE_NE, window_size=None):
 
     # else
     #  process raw data and return
-    return process(path, tag, window_size)
+    return process(path=path, tag=tag, window_size=window_size)
 
 
 def process_file(filename, run_tests=True, window_size=5):
@@ -320,6 +367,9 @@ def process_file(filename, run_tests=True, window_size=5):
         data['windows'] = windows
         data['window_targets'] = window_targets
 
+        # filter data based on num of windows
+        #  NOTE : analyze data to chop off rough edges
+        data = filter_data(data, num_windows=40, qlen=40)
 
     if run_tests:
         print(':: <test> [1/2] Test preprocessed data')
@@ -332,8 +382,44 @@ def process_file(filename, run_tests=True, window_size=5):
     return data
 
 
+def pad_sequences(idata, metadata):
+
+    wsize, msize = metadata['window_size'], metadata['memory_size']
+    qlen = metadata['max_query_len']
+
+    w2i = metadata['w2i']
+
+    def pad_windows(windows):
+        return windows +  [ [w2i[PAD]]* wsize ]*(msize-len(windows))
+
+    def pad_query(seq):
+        return seq + [w2i[PAD]]*(qlen-len(seq))
+
+    def pad_wtargets(wt):
+        return list(wt) + [0.]*(msize-len(wt))
+
+    data = {}
+    for tag in ['train', 'test', 'valid']:
+        data[tag] = {}
+
+        n = len(idata[tag]['queries'])
+
+        data[tag]['queries'] = np.array([ pad_query(q) 
+            for q in idata[tag]['queries'] ], dtype=np.int32).reshape(n, qlen)
+        data[tag]['windows'] = np.array([ pad_windows(q) for q in idata[tag]['windows'] ],
+                dtype=np.int32).reshape(n, msize, wsize)
+        data[tag]['window_targets'] = np.array([ pad_wtargets(wt) 
+                for wt in idata[tag]['window_targets'] ], dtype=np.float32).reshape(n, msize)
+        data[tag]['answers'] = np.array(idata[tag]['answers'], 
+                dtype=np.int32).reshape(n,)
+        data[tag]['candidates'] = np.array(idata[tag]['candidates'], 
+                dtype=np.int32).reshape(n, 10)
+
+    return data
+
+
 if __name__ == '__main__':
     #data, metadata = gather(TYPE_VERB)
     #data, metadata = gather(TYPE_PREP, window_size=None)
-    data, metadata = gather(BASE_PATH, TYPE_NOUN)
-    #data, metadata = gather(TYPE_NE)
+    #data, metadata = gather(BASE_PATH, TYPE_NOUN)
+    data, metadata = gather(tag=TYPE_NE, window_size=5)

@@ -10,10 +10,11 @@ from sanity import *
 from collections import OrderedDict
 
 
-class GoldilocksMemNet():
+class MemoryNet():
 
-    def __init__(self, hdim, num_hops, memsize, sentence_size, 
-            vocab_size, lr=0.025):
+    def __init__(self, hdim, num_hops, memsize, 
+            window_size, sentence_size, vocab_size, 
+            lr1=0.025, lr2=0.025):
 
         # reset graph
         tf.reset_default_graph()
@@ -25,8 +26,8 @@ class GoldilocksMemNet():
         self.n = 1
 
         #optimizer = tf.train.AdagradOptimizer(learning_rate=lr)
-        optimizer1 = tf.train.AdamOptimizer(learning_rate=lr)
-        optimizer2 = tf.train.AdamOptimizer(learning_rate=lr)
+        optimizer1 = tf.train.AdamOptimizer(learning_rate=lr1)
+        optimizer2 = tf.train.AdamOptimizer(learning_rate=lr2)
 
 
         def inference():
@@ -36,7 +37,7 @@ class GoldilocksMemNet():
                 # placeholders
                 queries = tf.placeholder(tf.int32, shape=[None, sentence_size], 
                         name='queries')
-                windows = tf.placeholder(tf.int32, shape=[None, memsize, sentence_size], 
+                windows = tf.placeholder(tf.int32, shape=[None, memsize, window_size], 
                         name='windows')
                 answers = tf.placeholder(tf.int32, shape=[None, ], 
                         name='answers')
@@ -63,13 +64,16 @@ class GoldilocksMemNet():
                 C = tf.get_variable('C', shape=[vocab_size, hdim], dtype=tf.float32, 
                                    initializer=self.init)
 
+            # NOTE : remove position encoding
             # Position encoding
-            encoding = tf.constant(self.position_encoding(sentence_size, hdim))
+            # encoding = tf.constant(self.position_encoding(sentence_size, hdim))
 
             with tf.name_scope('question'):
-                # Embed Questions (B)
+                # Embed Questions (A)
                 u0 = tf.nn.embedding_lookup(A, queries)
-                u0 = tf.reduce_sum(u0 * encoding, axis=1)
+                # NOTE : remove position encoding
+                # u0 = tf.reduce_sum(u0 * encoding, axis=1)
+                u0 = tf.reduce_sum(u0, axis=1)
                 u = [u0] # accumulate question emb
 
             with tf.name_scope('temporal'):
@@ -86,7 +90,9 @@ class GoldilocksMemNet():
                 for i in range(num_hops):
                     # embed windows
                     m = tf.nn.embedding_lookup(A, windows)
-                    m = tf.reduce_sum(m*encoding, axis=2) + TA[i]
+                    # NOTE : remove position encoding
+                    # m = tf.reduce_sum(m*encoding, axis=2) + TA[i]
+                    m = tf.reduce_sum(m, axis=2) + TA[i]
                     c = tf.nn.embedding_lookup(C, windows)
                     c = tf.reduce_sum(c, axis=2) + TC[i]
 
@@ -140,7 +146,7 @@ class GoldilocksMemNet():
                 self.train_op = [ train_op_primary, train_op_ma ]
 
 
-            self.loss = loss
+            self.loss = loss + ma_loss
             self.accuracy = accuracy
             self.windows = windows
             self.queries = queries
@@ -212,12 +218,13 @@ if __name__ == '__main__':
 
     # create model
     print('> Create model')
-    model = GoldilocksMemNet(hdim= 20, # embedding dimension
+    model = MemoryNet(hdim= 20, # embedding dimension
                              num_hops=3,
                              memsize=5,
                              sentence_size= 10, # max sentence len
                              vocab_size= 100,
-                             lr=0.025,
+                             lr1=0.025,
+                             lr2=0.025
                              )
     print(sanity([model.train_op], fetch_data=True))
     # sanity check : success

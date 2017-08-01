@@ -1,3 +1,6 @@
+import sys
+
+
 def test_windows(windows, window_size):
     # shape check
     wlens = [len(wj) for wi in windows for wj in wi]
@@ -13,10 +16,12 @@ def test_vocabulary(vocab, dataset):
     answers = list(set(answers))
 
     # check if all answers exist in candidates
-    assert len([ w for w in answers if w not in candidates ]) == 0
+    outliers = [ w for w in answers if w not in candidates ]
+    assert len(outliers) == 0
 
     # check if all candidates exist in vocabulary
-    assert len([ w for w in candidates if w not in vocab ]) == 0
+    outliers = [ w for w in candidates if w not in vocab ]
+    assert len(outliers) == 0
 
 
 def test_preprocessed_dataset(dataset):

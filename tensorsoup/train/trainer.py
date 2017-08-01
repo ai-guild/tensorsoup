@@ -1,6 +1,8 @@
 from tqdm import tqdm
 import tensorflow as tf
 
+import numpy as np
+
 
 class Trainer(object):
 
@@ -18,7 +20,7 @@ class Trainer(object):
     def evaluate(self, visualizer=None):
         datasrc = self.datasrc
         batch_size = datasrc.batch_size
-        num_examples = datasrc.getN('test')
+        num_examples = datasrc.n['test']#getN('test')
         model = self.model
 
         # num copies
@@ -70,7 +72,11 @@ class Trainer(object):
         # num copies of model
         n = model.n
         
-        num_examples = datasrc.getN('train') * datasrc.random_x if self.rand else datasrc.getN('train')
+        # get count of data
+        num_examples = datasrc.n['train']
+        if self.rand:
+            num_examples = num_examples * datasrc.random_x
+
         num_iterations = int(num_examples/(batch_size*n))
 
         build_feed = self.build_feed_dict if n == 1 else self.build_feed_dict_multi
