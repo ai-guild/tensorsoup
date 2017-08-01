@@ -160,7 +160,7 @@ def gather_metadata(data, vocab):
             }
 
 
-def story2windows(story, candidates, window_size):
+def story2windows(story, candidates, answer, window_size):
     # tokenize
     words = story.split(' ')
     storylen = len(words)
@@ -178,14 +178,32 @@ def story2windows(story, candidates, window_size):
             # update end to last index
             end = storylen - 1
         return words[start:end]
-        
-    return [ get_window(i) for i,w in enumerate(words)
-            if w in candidates ]
+
+    # iterate through words in story
+    #  1. check if word is a candidate
+    #       if so, get window
+    #  2. check if word is the answer
+    #       if so, get window_target (index of window)
+    windows, window_targets = [], []
+    for i,w in enumerate(words):
+        if w in candidates:
+            windows.append(get_window(i))
+            # check if candidate is the answer
+            if w == answer:
+                # get index of window
+                window_targets.append(len(windows)-1)
+
+    return windows, window_targets
 
 
 def build_windows(dataset, window_size):
-    return [ story2windows(s,c, window_size) for s,c in 
-            zip(dataset['stories'], dataset['candidates']) ]
+    windows, window_targets = []
+    for s,c,a in zip(dataset['stories'], dataset['candidates'], dataset['answers']):
+        wi, wti = story2windows(s,c,a, window_size) 
+        windows.append(wi)
+        window_targets.append(wti)
+    return windows, window_targets
+
 
 def index(data, metadata):
     # word to index dictionary
@@ -290,10 +308,11 @@ def process_file(filename, run_tests=True, window_size=None):
 
     if window_size:
         print(':: <proc> [3/3] Get windows')
-        windows = build_windows(data, window_size=5)
+        windows, window_targets = build_windows(data, window_size=5)
 
         # integrate windows to dataset
         data['windows'] = windows
+        data['window_targets'] = window_targets
 
 
     if run_tests:
@@ -308,7 +327,7 @@ def process_file(filename, run_tests=True, window_size=None):
 
 
 if __name__ == '__main__':
-    data, metadata = gather(TYPE_VERB)
-    data, metadata = gather(TYPE_PREP, window_size=None)
-    data, metadata = gather(TYPE_NE)
+    #data, metadata = gather(TYPE_VERB)
+    #data, metadata = gather(TYPE_PREP, window_size=None)
     data, metadata = gather(TYPE_NOUN)
+    #data, metadata = gather(TYPE_NE)
