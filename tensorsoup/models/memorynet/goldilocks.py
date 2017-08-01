@@ -25,8 +25,9 @@ class GoldilocksMemNet():
         self.n = 1
 
         #optimizer = tf.train.AdagradOptimizer(learning_rate=lr)
-        optimizer = tf.train.AdamOptimizer(learning_rate=lr)
-        
+        optimizer1 = tf.train.AdamOptimizer(learning_rate=lr)
+        optimizer2 = tf.train.AdamOptimizer(learning_rate=lr)
+
 
         def inference():
 
@@ -34,29 +35,32 @@ class GoldilocksMemNet():
 
                 # placeholders
                 questions = tf.placeholder(tf.int32, shape=[None, sentence_size], 
-                        name='questions' )
-                stories = tf.placeholder(tf.int32, shape=[None, memsize, sentence_size], 
-                        name='stories' )
+                        name='questions')
+                windows = tf.placeholder(tf.int32, shape=[None, memsize, sentence_size], 
+                        name='windows')
                 answers = tf.placeholder(tf.int32, shape=[None, ], 
-                        name='answers' )
+                        name='answers')
                 candidates = tf.placeholder(tf.int32, shape=[None, 10], 
-                        name='candidates' )
+                        name='candidates')
+                window_targets = tf.placeholder(tf.int32, shape=[None, memsize],
+                        name='window_targets')
                 mode = tf.placeholder(tf.int32, shape=(), name='mode')
 
             # expose handle to placeholders
             placeholders = OrderedDict()
             placeholders['questions'] = questions
-            placeholders['stories'] = stories
+            placeholders['windows'] = windows
             placeholders['answers'] = answers
             placeholders['candidates'] = candidates
+            placeholders['window_targets'] = window_targets
 
             # embedding
             with tf.name_scope('embeddings'):
-                A = tf.get_variable('A', shape=[num_hops, vocab_size, hdim], dtype=tf.float32, 
+                A = tf.get_variable('A', shape=[vocab_size, hdim], dtype=tf.float32, 
                                    initializer=self.init)
-                B = tf.get_variable('B', shape=[vocab_size, hdim], dtype=tf.float32, 
-                                   initializer=self.init)
-                C = tf.get_variable('C', shape=[num_hops, vocab_size, hdim], dtype=tf.float32, 
+                #B = tf.get_variable('B', shape=[vocab_size, hdim], dtype=tf.float32, 
+                #                   initializer=self.init)
+                C = tf.get_variable('C', shape=[vocab_size, hdim], dtype=tf.float32, 
                                    initializer=self.init)
 
             # Position encoding
@@ -64,7 +68,7 @@ class GoldilocksMemNet():
 
             with tf.name_scope('question'):
                 # Embed Questions (B)
-                u0 = tf.nn.embedding_lookup(B, questions)
+                u0 = tf.nn.embedding_lookup(A, questions)
                 u0 = tf.reduce_sum(u0 * encoding, axis=1)
                 u = [u0] # accumulate question emb
 
@@ -80,10 +84,10 @@ class GoldilocksMemNet():
             with tf.name_scope('memloop'):
                 # memory loop
                 for i in range(num_hops):
-                    # embed stories
-                    m = tf.nn.embedding_lookup(A[i], stories)
+                    # embed windows
+                    m = tf.nn.embedding_lookup(A, windows)
                     m = tf.reduce_sum(m*encoding, axis=2) + TA[i]
-                    c = tf.nn.embedding_lookup(C[i], stories)
+                    c = tf.nn.embedding_lookup(C, windows)
                     c = tf.reduce_sum(c, axis=2) + TC[i]
 
                     score = tf.reduce_sum(m*tf.expand_dims(u[-1], axis=1), axis=-1)
@@ -96,7 +100,7 @@ class GoldilocksMemNet():
 
 
             with tf.name_scope('answer'):
-                cand_emb = tf.nn.embedding_lookup(B, candidates)
+                cand_emb = tf.nn.embedding_lookup(A, candidates)
                 logits = attention(cand_emb, u[-1], d=hdim, score=True,
                         initializer=self.init)
                 probs = tf.nn.softmax(logits)
@@ -112,6 +116,12 @@ class GoldilocksMemNet():
                 # attach loss to instance
                 loss = tf.reduce_mean(cross_entropy)
 
+            # memory access supervision
+            with tf.name_scope('self_sup'):
+                # we have 'scores' of memories
+                ma_loss = tf.losses.mean_squared_error(window_targets, 
+                        tf.nn.softmax(score))
+
             with tf.name_scope('evaluation'):
                 # evaluation
                 correct_labels = tf.equal(tf.cast(answers, tf.int64), tf.argmax(probs, axis=-1))
@@ -120,19 +130,26 @@ class GoldilocksMemNet():
             # optimization
             with tf.name_scope('optimization'):
                 # gradient clipping
-                gvs = optimizer.compute_gradients(loss)
+                gvs = optimizer1.compute_gradients(loss)
                 clipped_gvs = [(tf.clip_by_norm(grad, 40.), var) for grad, var in gvs]
-                self.train_op = optimizer.apply_gradients(clipped_gvs)
+                train_op_primary = optimizer1.apply_gradients(clipped_gvs)
+
+                # optimize memory access
+                train_op_ma = optimizer2.minimize(ma_loss)
+
+                self.train_op = [ train_op_primary, train_op_ma ]
+
 
             self.loss = loss
             self.accuracy = accuracy
-            self.stories = stories
+            self.windows = windows
             self.questions = questions
             self.answers = answers
             self.candidates = candidates
+            self.window_targets = window_targets
             self.mode = mode
             
-            self.placeholders = [stories, questions, answers, candidates]
+            self.placeholders = [windows, questions, answers, candidates, window_targets]
 
         # execute and build graph
         inference()
@@ -202,5 +219,5 @@ if __name__ == '__main__':
                              vocab_size= 100,
                              lr=0.025,
                              )
-    #print(sanity([model.prediction], fetch_data=True))
+    print(sanity([model.train_op], fetch_data=True))
     # sanity check : success
