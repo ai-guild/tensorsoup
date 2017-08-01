@@ -14,7 +14,7 @@ from visualizer import Visualizer
 if __name__ == '__main__':
 
     # optimal hyperparamters
-    batch_size = 250
+    batch_size = 120
     window_size = 5
 
     datasrc = DataSource(datadir='../../../datasets/CBTest/data/', 
@@ -32,7 +32,7 @@ if __name__ == '__main__':
                       window_size= window_size,
                       sentence_size=sentence_size, 
                       vocab_size=vocab_size,
-                      lr1 = 0.01, lr2=0.01)
+                      lr1 = 0.001, lr2=0.001)
 
     # setup visualizer
     #  by default, writes to ./log/
@@ -55,7 +55,10 @@ if __name__ == '__main__':
         trainer = Trainer(sess, model, datasrc, batch_size)
 
         # fit model
-        trainer.fit(epochs=600, mode=Trainer.TRAIN, verbose=True, visualizer=vis)
+        trainer.fit(epochs=600, mode=Trainer.TRAIN, 
+                verbose=True, visualizer=vis, 
+                eval_interval=1,
+                early_stop=False)
         '''
         print('****************************************************************** PRETRAINING OVER ')
         for task_id in reversed(range(21)):

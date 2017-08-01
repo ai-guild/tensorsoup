@@ -59,7 +59,9 @@ class Trainer(object):
         tqdm.write(log)
         return avg_loss/num_iterations, avg_acc/(num_iterations)
 
-    def fit(self, epochs, eval_interval=10, mode=1, verbose=True, visualizer=None):
+    def fit(self, epochs, eval_interval=10, mode=1, 
+            verbose=True, visualizer=None,
+            early_stop=True):
 
         def tq(x):
             return tqdm(x) if verbose else x
@@ -120,9 +122,10 @@ class Trainer(object):
                 eloss = self.evaluate(visualizer)
                 loss_trend.append(eloss)
 
-                if early_stopping(loss_trend):
-                    tqdm.write('stopping from early stopping')
-                    return
+                if early_stop:
+                    if early_stopping(loss_trend):
+                        tqdm.write('stopping from early stopping')
+                        return
 
     def build_feed_dict_multi(self, ll1, ll2):
         feed_dict = {}

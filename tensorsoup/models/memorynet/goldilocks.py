@@ -107,11 +107,16 @@ class MemoryNet():
 
             with tf.name_scope('answer'):
                 cand_emb = tf.nn.embedding_lookup(A, candidates)
-                logits = attention(cand_emb, u[-1], d=hdim, score=True,
+                Wo = tf.get_variable('Wo', dtype=tf.float32, 
+                        shape=[hdim, vocab_size],
                         initializer=self.init)
+                logits = tf.matmul(u[-1], Wo)
+                #logits = attention(cand_emb, u[-1], d=hdim, score=True,
+                #        initializer=self.init)
+
                 probs = tf.nn.softmax(logits)
                 # prediction
-                self.prediction = tf.argmax(probs)
+                self.prediction = tf.argmax(probs, axis=-1)
 
             with tf.name_scope('loss'):
                 # optimization
@@ -146,7 +151,7 @@ class MemoryNet():
                 self.train_op = [ train_op_primary, train_op_ma ]
 
 
-            self.loss = loss + ma_loss
+            self.loss = loss #+ ma_loss
             self.accuracy = accuracy
             self.windows = windows
             self.queries = queries

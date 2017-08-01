@@ -221,9 +221,9 @@ def index(data, metadata):
     indexed_data =  {
             'queries' : [ words2indices(q.split(' ')) for q in data['queries'] ],
             'candidates' : [ words2indices(c) for c in data['candidates'] ],
-            'answers' : [ c.index(a) for a,c in 
-                zip(data['answers'], data['candidates']) ]
-            #'answers' : [ w2i[a] for a in data['answers'] ]
+            #'answers' : [ c.index(a) for a,c in 
+            #    zip(data['answers'], data['candidates']) ],
+            'answers' : [ w2i[a] for a in data['answers'] ]
             }
 
     if 'windows' in data:
@@ -369,7 +369,7 @@ def process_file(filename, run_tests=True, window_size=5):
 
         # filter data based on num of windows
         #  NOTE : analyze data to chop off rough edges
-        data = filter_data(data, num_windows=40, qlen=40)
+        data = filter_data(data, num_windows=50, qlen=60)
 
     if run_tests:
         print(':: <test> [1/2] Test preprocessed data')
