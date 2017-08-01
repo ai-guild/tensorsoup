@@ -34,8 +34,8 @@ class GoldilocksMemNet():
             with tf.name_scope('input'):
 
                 # placeholders
-                questions = tf.placeholder(tf.int32, shape=[None, sentence_size], 
-                        name='questions')
+                queries = tf.placeholder(tf.int32, shape=[None, sentence_size], 
+                        name='queries')
                 windows = tf.placeholder(tf.int32, shape=[None, memsize, sentence_size], 
                         name='windows')
                 answers = tf.placeholder(tf.int32, shape=[None, ], 
@@ -48,7 +48,7 @@ class GoldilocksMemNet():
 
             # expose handle to placeholders
             placeholders = OrderedDict()
-            placeholders['questions'] = questions
+            placeholders['queries'] = queries
             placeholders['windows'] = windows
             placeholders['answers'] = answers
             placeholders['candidates'] = candidates
@@ -68,7 +68,7 @@ class GoldilocksMemNet():
 
             with tf.name_scope('question'):
                 # Embed Questions (B)
-                u0 = tf.nn.embedding_lookup(A, questions)
+                u0 = tf.nn.embedding_lookup(A, queries)
                 u0 = tf.reduce_sum(u0 * encoding, axis=1)
                 u = [u0] # accumulate question emb
 
@@ -143,13 +143,13 @@ class GoldilocksMemNet():
             self.loss = loss
             self.accuracy = accuracy
             self.windows = windows
-            self.questions = questions
+            self.queries = queries
             self.answers = answers
             self.candidates = candidates
             self.window_targets = window_targets
             self.mode = mode
             
-            self.placeholders = [windows, questions, answers, candidates, window_targets]
+            self.placeholders = [queries, windows, answers, candidates, window_targets]
 
         # execute and build graph
         inference()

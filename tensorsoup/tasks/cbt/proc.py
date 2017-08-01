@@ -1,3 +1,4 @@
+import numpy as np
 import pickle
 import os
 
@@ -188,16 +189,13 @@ def story2windows(story, candidates, answer, window_size):
     for i,w in enumerate(words):
         if w in candidates:
             windows.append(get_window(i))
-            # check if candidate is the answer
-            if w == answer:
-                # get index of window
-                window_targets.append(len(windows)-1)
+            window_targets.append(int(w==answer))
 
-    return windows, window_targets
+    return windows, np.array(window_targets, np.float32)/sum(window_targets)
 
 
 def build_windows(dataset, window_size):
-    windows, window_targets = []
+    windows, window_targets = [], []
     for s,c,a in zip(dataset['stories'], dataset['candidates'], dataset['answers']):
         wi, wti = story2windows(s,c,a, window_size) 
         windows.append(wi)
@@ -223,12 +221,20 @@ def index(data, metadata):
             }
 
     if 'windows' in data:
-        indexed_data['windows'] = [ words2indices(wi) for wi in data['windows'] ]
+        indexed_windows = []
+        for windows in data['windows']:
+            iwindows = []
+            for window in windows:
+                iwindows.append(words2indices(window))
+            indexed_windows.append(iwindows)
+
+        indexed_data['windows'] = indexed_windows
+        indexed_data['window_targets'] = data['window_targets']
 
     return indexed_data
 
 
-def process(tag=TYPE_NE, run_tests=True, serialize_data=True, window_size=None):
+def process(path=BASE_PATH, tag=TYPE_NE, run_tests=True, serialize_data=True, window_size=None):
     # build file names
     train_file = 'cbtest_{}_train.txt'.format(tag)
     valid_file = 'cbtest_{}_valid_2000ex.txt'.format(tag)
@@ -236,11 +242,11 @@ def process(tag=TYPE_NE, run_tests=True, serialize_data=True, window_size=None):
 
     # process files
     print(':: [1/3] Fetch TRAIN data')
-    train = process_file(train_file, window_size)
+    train = process_file(path + '/' + train_file, window_size)
     print(':: [2/3] Fetch VALID data')
-    valid = process_file(valid_file, window_size)
+    valid = process_file(path + '/' + valid_file, window_size)
     print(':: [3/3] Fetch TEST Data')
-    test  = process_file(test_file, window_size)
+    test  = process_file(path + '/' + test_file, window_size)
 
     texts = []
     for data in [train, test, valid]:
@@ -277,10 +283,10 @@ def process(tag=TYPE_NE, run_tests=True, serialize_data=True, window_size=None):
     return data, metadata
 
 
-def gather(tag=TYPE_NE, window_size=None):
+def gather(path=BASE_PATH, tag=TYPE_NE, window_size=None):
     # build file names
-    dataf = '{}/data.{}'.format(BASE_PATH, tag)
-    metadataf = '{}/metadata.{}'.format(BASE_PATH, tag)
+    dataf = '{}/data.{}'.format(path, tag)
+    metadataf = '{}/metadata.{}'.format(path, tag)
 
     # if processed files exist
     #  read pickle and return
@@ -295,13 +301,13 @@ def gather(tag=TYPE_NE, window_size=None):
 
     # else
     #  process raw data and return
-    return process(tag, window_size)
+    return process(path, tag, window_size)
 
 
-def process_file(filename, run_tests=True, window_size=None):
+def process_file(filename, run_tests=True, window_size=5):
     # fetch data from file
     print(':: <proc> [1/3] Fetch data from file')
-    data = fetch_data(BASE_PATH + '/' + filename)
+    data = fetch_data(filename)
 
     print(':: <proc> [2/3] Preprocess data')
     data = preprocess(data)
@@ -329,5 +335,5 @@ def process_file(filename, run_tests=True, window_size=None):
 if __name__ == '__main__':
     #data, metadata = gather(TYPE_VERB)
     #data, metadata = gather(TYPE_PREP, window_size=None)
-    data, metadata = gather(TYPE_NOUN)
+    data, metadata = gather(BASE_PATH, TYPE_NOUN)
     #data, metadata = gather(TYPE_NE)
