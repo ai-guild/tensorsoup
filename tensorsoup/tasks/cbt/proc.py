@@ -6,6 +6,7 @@ import sys
 sys.path.append('../../')
 
 from tasks.cbt.tests import *
+from tproc.utils import *
 
 
 BASE_PATH = '../../../datasets/CBTest/data'
@@ -18,6 +19,8 @@ TYPE_NE = 'NE'
 # special tokens
 UNK = '<unk>'
 PAD = '<pad>'
+special_tokens = [ PAD, UNK ]
+
 
 def _read_sample(n, samples):
     '''
@@ -75,33 +78,6 @@ def fetch_data(path):
     return (contexts, queries, candidates, answers)
 
 
-def is_word(w):
-    '''
-        is_word(str : w) -> Boolean
-            if a word contains 
-             at least 1 alphanumeric char
-    '''
-    return len([ch for ch in w if int(ch.isalnum()) ]) >  0
-
-
-def preprocess_text(p, chars='_.,!@#$%^&*()\?:{}[]/;`~*+|'):
-    filtered_text = ''
-    for ch in p:
-        if ch not in chars:
-            filtered_text = filtered_text + ch
-    filtered_text = filtered_text.replace('  ', ' ').strip()
-    
-    allowed_words = []
-    for w in filtered_text.split(' '):
-        if '-' in w or '\'' in w or '"' in w:
-            if is_word(w):
-                allowed_words.append(w.lower())
-        else:
-            allowed_words.append(w.lower())
-            
-    return ' '.join(allowed_words)
-
-
 def preprocess_candidates(c):
     # check each word
     #  remove non-words
@@ -143,29 +119,17 @@ def preprocess(raw_dataset):
     return dataset
 
 
-def build_vocabulary(texts):
-
-    # combine windows and queries
-    #  into a text blob
-    text = ' '.join(texts)
-    
-    # get all words
-    words = text.split(' ')
-
-    # get unique words -> vocab
-    return [PAD, UNK] + sorted(list(set(words)))
-
-
 def gather_metadata(data, vocab):
     # assumption : max story/query len of training set is larger than test/valid
     #  i'm sure this will come back to bite me in the ass
     return {
-            'max_story_len' : max([len(s.split(' ')) for s in data['stories']]),
-            'max_query_len' : max([len(q.split(' ')) for q in data['queries']]),
+            'slen' : max([len(s.split(' ')) for s in data['stories']]),
+            'qlen' : max([len(q.split(' ')) for q in data['queries']]),
             'w2i' : { w:i for i,w in enumerate(vocab) },
             'i2w' : vocab,
             'vocab_size' : len(vocab),
-            'memory_size' : max([len(wi) for wi in data['windows']])
+            'memory_size' : max([len(wi) for wi in data['windows']]),
+            'special_tokens' : special_tokens
             }
 
 
@@ -202,13 +166,22 @@ def story2windows(story, candidates, answer, window_size):
     return windows, np.array(window_targets, np.float32)/sum(window_targets)
 
 
-def build_windows(dataset, window_size):
+def build_windows(data, window_size):
+
     windows, window_targets = [], []
-    for s,c,a in zip(dataset['stories'], dataset['candidates'], dataset['answers']):
+    # iterate through s,c,a
+    for s,c,a in zip(data['stories'], data['candidates'], data['answers']):
         wi, wti = story2windows(s,c,a, window_size) 
         windows.append(wi)
         window_targets.append(wti)
-    return windows, window_targets
+
+    # integrate windows to data
+    data.update( {
+        'windows' : windows,
+        'window_targets' : window_targets
+        })
+
+    return data
 
 
 def index(data, metadata):
@@ -221,8 +194,8 @@ def index(data, metadata):
     indexed_data =  {
             'queries' : [ words2indices(q.split(' ')) for q in data['queries'] ],
             'candidates' : [ words2indices(c) for c in data['candidates'] ],
-            #'answers' : [ c.index(a) for a,c in 
-            #    zip(data['answers'], data['candidates']) ],
+            'ainc' : [ c.index(a) for a,c in 
+                zip(data['answers'], data['candidates']) ],
             'answers' : [ w2i[a] for a in data['answers'] ]
             }
 
@@ -240,27 +213,6 @@ def index(data, metadata):
     return indexed_data
 
 
-def filter_by_num_windows(idata, n=40):
-    data = {}
-    for k,v in idata.items():
-        data[k] = []
-        for i, item in enumerate(idata[k]):
-            if len(idata['windows'][i]) <= n:
-                data[k].append(item)
-
-    return data
-        
-
-def filter_by(idata, cond):
-    data = {}
-    for k,v in idata.items():
-        data[k] = []
-        for i, item in enumerate(idata[k]):
-            if cond(idata, i):
-                data[k].append(item)
-    return data
- 
-
 def filter_data(idata, num_windows=30, qlen=40):
 
     data = filter_by(idata, 
@@ -274,7 +226,9 @@ def filter_data(idata, num_windows=30, qlen=40):
     return data
 
 
-def process(path=BASE_PATH, tag=TYPE_NE, run_tests=False, serialize_data=True, window_size=5):
+def process(path=BASE_PATH, tag=TYPE_NE, run_tests=False, 
+        serialize_data=True, window_size=5):
+
     # build file names
     train_file = 'cbtest_{}_train.txt'.format(tag)
     valid_file = 'cbtest_{}_valid_2000ex.txt'.format(tag)
@@ -299,7 +253,7 @@ def process(path=BASE_PATH, tag=TYPE_NE, run_tests=False, serialize_data=True, w
 
     # build vocabulary
     print(':: [1/2] build vocabulary')
-    vocab = build_vocabulary(texts)
+    vocab = build_vocabulary(texts, special_tokens)
     print(':: [2/2] vocabulary size', len(vocab))
 
     if run_tests:
@@ -361,12 +315,9 @@ def process_file(filename, run_tests=True, window_size=5):
 
     if window_size:
         print(':: <proc> [3/3] Get windows')
-        windows, window_targets = build_windows(data, window_size=5)
+        data = build_windows(data, window_size=5)
 
-        # integrate windows to dataset
-        data['windows'] = windows
-        data['window_targets'] = window_targets
-
+        
         # filter data based on num of windows
         #  NOTE : analyze data to chop off rough edges
         data = filter_data(data, num_windows=50, qlen=60)
@@ -377,7 +328,7 @@ def process_file(filename, run_tests=True, window_size=5):
 
         if window_size:
             print(':: <test> [2/2] Test windows')
-            test_windows(windows, window_size=5)
+            test_windows(data['windows'], window_size=5)
 
     return data
 
@@ -385,7 +336,7 @@ def process_file(filename, run_tests=True, window_size=5):
 def pad_sequences(idata, metadata):
 
     wsize, msize = metadata['window_size'], metadata['memory_size']
-    qlen = metadata['max_query_len']
+    qlen = metadata['qlen']
 
     w2i = metadata['w2i']
 

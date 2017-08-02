@@ -1,4 +1,5 @@
 import numpy as np
+import os
 
 
 def is_word(w):
@@ -9,7 +10,7 @@ def is_word(w):
     '''
     return len([ch for ch in w if int(ch.isalnum()) ]) >  0
 
-def preprocess_text(p, chars='_.,!@#$%^&*()\?:{}[]/;`~*+|'):
+def preprocess_text(p, chars='_.,!#$%^&*()\?:{}[]/;`~*+|'):
     filtered_text = ''
     for ch in p:
         if ch not in chars:
@@ -73,3 +74,6 @@ def pad_sequences(seqs, maxlen, metadata):
     # return padded nd.array
     return np.array([ pad_seq(seq) 
         for seq in seqs ], dtype=np.int32).reshape(n, maxlen)
+
+def list_of_files(path):
+    return [ path + '/' + fname for fname in os.listdir(path) ]
