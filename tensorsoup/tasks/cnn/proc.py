@@ -32,7 +32,8 @@ def extract_structured_data(filename):
     return read_from_file(filename)[1:4]
 
 
-def fetch_data(tag, path, window_size, filter_params):
+def fetch_data(tag, path, window_size, 
+        max_windows, qlen):
 
     # get list of files
     files = list_of_files(path + '/' + tag)
@@ -46,23 +47,22 @@ def fetch_data(tag, path, window_size, filter_params):
         'window_targets' : []
     }
 
-    # get filter params
-    max_windows = filter_params['num_windows']
-    qlen = filter_params['qlen']
-
     # collect all useful words for vocab
     words = []
 
     for f in tqdm(files):
         s,q,a = extract_structured_data(f)
-        # preprocess s,q,a
-        s = preprocess_text(s)
-        a = preprocess_text(a)
+
+        # preprocess q
         q = preprocess_text(q)
 
         # check num words in query
         if len(q.split(' ')) > qlen:
             continue
+
+        # preprocess story, answer
+        s = preprocess_text(s)
+        a = preprocess_text(a)
 
         # get candidates from story
         c = get_candidates(s)
