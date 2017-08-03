@@ -191,26 +191,36 @@ def index(data, metadata):
     def words2indices(words):
         return [ w2i[w] if w in w2i else w2i[UNK] for w in words ]
 
-    indexed_data =  {
-            'queries' : [ words2indices(q.split(' ')) for q in data['queries'] ],
-            'candidates' : [ words2indices(c) for c in data['candidates'] ],
-            'ainc' : [ c.index(a) for a,c in 
-                zip(data['answers'], data['candidates']) ],
-            'answers' : [ w2i[a] for a in data['answers'] ]
+    # new dict to hold indices
+    idx_data = {
+            'queries' : [],
             }
 
-    if 'windows' in data:
-        indexed_windows = []
-        for windows in data['windows']:
-            iwindows = []
-            for window in windows:
-                iwindows.append(words2indices(window))
-            indexed_windows.append(iwindows)
+    # iterate through q,c,a
+    for i, (q,c,a) in enumerate(zip(data['queries'],
+        data['candidates'], data['answers'])):
 
-        indexed_data['windows'] = indexed_windows
-        indexed_data['window_targets'] = data['window_targets']
+        # tokenize, index query
+        #  and to dict
+        idx_data['queries'].append(words2indices(q.split(' ')))
+        # index candidates, answers
+        c = words2indices(c)
+        a = w2i(a) if a in w2i else w2i[UNK]
 
-    return indexed_data
+        idx_data['candidates'].append(c)
+        idx_data['answers'].append(a)
+
+        # get location of answer among candidates
+        idx_data['ainc'].append(c.index(a))
+
+        # deal with windows
+        #  fetch ith window, wt
+        windows, wt = data['windows'][i], data['window_targets'][i]
+        w = [ words2indices(window) for window in windows ]
+        idx_data['windows'].append(w)
+        idx_data['window_targets'].append(wt)
+
+    return idx_data
 
 
 def filter_data(idata, num_windows=30, qlen=40):

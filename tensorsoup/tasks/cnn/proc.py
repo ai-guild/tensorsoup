@@ -32,41 +32,68 @@ def extract_structured_data(filename):
     return read_from_file(filename)[1:4]
 
 
-def fetch_data(tag, path):
+def fetch_data(tag, path, window_size, filter_params):
+
+    # get list of files
     files = list_of_files(path + '/' + tag)
+
+    # init dict
     data = {
-        'stories' : [],
         'queries' : [],
-        'answers' : []
+        'answers' : [],
+        'candidates' : [],
+        'windows' : [],
+        'window_targets' : []
     }
+
+    # get filter params
+    max_windows = filter_params['num_windows']
+    qlen = filter_params['qlen']
+
+    # collect all useful words for vocab
+    words = []
+
     for f in tqdm(files):
         s,q,a = extract_structured_data(f)
-        data['stories'].append(s)
+        # preprocess s,q,a
+        s = preprocess_text(s)
+        a = preprocess_text(a)
+        q = preprocess_text(q)
+
+        # check num words in query
+        if len(q.split(' ')) > qlen:
+            continue
+
+        # get candidates from story
+        c = get_candidates(s)
+
+        # build windows and window targets
+        w, wt = story2windows(s,c,a, window_size)
+
+        # check for max num of windows
+        if len(w) > max_windows:
+            continue
+
+        # collect words
+        words.append(q.split(' '))
+        words.append([ word for wi in w for word in wi ])
+
+        # add to list
         data['queries'].append(q)
         data['answers'].append(a)
-    
-    return preprocess(data)
+        data['candidates'].append(c)
+        data['windows'].append(w)
+        data['window_targets'].append(wt)
 
-
-def preprocess(idata):
-    return {
-        'stories' : [preprocess_text(s) for s in idata['stories']],
-        'queries' : [preprocess_text(q) for q in idata['queries']],
-        'answers' : idata['answers']
-    }
-
-
-def build_candidates(data):
-
-    def get_candidates(story):
-        return list(set([ w for w in story.split(' ') 
-            if '@entity' in w ]))
-
-    data.update( {
-        'candidates' : [ get_candidates(s) for s in data['stories'] ]
-        })
+    # add list of unique words to data dict
+    data['words'] = list(set(words))
 
     return data
+
+
+def get_candidates(story):
+    return list(set([ w for w in story.split(' ') 
+        if '@entity' in w ]))
 
 
 def gather_metadata(data, vocab):
@@ -87,30 +114,25 @@ def gather_metadata(data, vocab):
 
     return metadata
 
+
 def process(tag, path, window_size):
+
+    if os.path.isfile(path + '/' + tag + '.buffer'):
+        print(':: <process> [1/2] {}.buffer present'.format(tag))
+        print(':: <process> [2/2] Reading from buffer')
+        with open(path + '/' + tag + '.buffer', 'rb') as handle:
+            return pickle.load(handle)
+
     print(':: <process>', tag)
 
     # fetch data from file; preprocess
-    print('::\t [1/5] Fetch raw data')
-    raw_data = fetch_data(tag, path)
+    print('::\t [1/2] Fetch data from file')
+    data = fetch_data(tag, path, window_size, max_windows=80, qlen=30)
 
-    # gather candidates from stories
-    print('::\t [2/5] Build candidates')
-    data = build_candidates(raw_data)
-
-    # build windows
-    if window_size:
-        print('::\t [3/5] Build windows')
-        data = build_windows(data, window_size)
-
-        # remove stories
-        print('::\t [4/4] Remove stories')
-        del data['stories']
-        assert 'stories' not in data
-
-        # filter data based on num of windows
-        print('::\t [4/5] Filter data')
-        data = filter_data(data, num_windows=120, qlen=30)
+    # save processed data to file
+    print('::\t [2/2] Write data to pickle')
+    with open(path + '/' + tag + '.buffer', 'wb') as handle:
+        pickle.dump(data, handle, pickle.HIGHEST_PROTOCOL)
 
     return data
 
@@ -122,22 +144,18 @@ def generate(path, window_size, serialize=True,
     data = { }
 
     # fetch processed data for each tag
-    texts = []
+    words = []
     for i, tag in enumerate(TAGS):
         print(':: [{}/3] Process {}'.format(i, tag))
         data[tag] = process(tag, path, window_size)
-        texts.extend(data[tag]['queries'])
-        flat_windows = [ ' '.join(wi) for w in data[tag]['windows'] 
-                for wi in w ]
-        texts.extend(flat_windows)
-
+        words.extend(data[tag]['words'])
 
     # build vocabulary
-    print(':: [1/1] Build vocabulary')
-    vocab = build_vocabulary(texts, special_tokens)
+    print(':: [1/2] Build vocabulary')
+    vocab = special_tokens + sorted(list(set(words)))
 
-    print(':: [1/1] Gather metadata')
     # build metadata
+    print(':: [2/2] Gather metadata')
     metadata = gather_metadata(data, vocab)
     # add window info in metadata
     metadata['window_size'] = window_size 
