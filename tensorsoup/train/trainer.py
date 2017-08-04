@@ -51,8 +51,8 @@ class Trainer(object):
                     visualizer.eval_log(results[-1], i)
 
 
-            avg_loss += l
-            avg_acc += acc
+            avg_loss += 10 if np.isnan(l) else l
+            avg_acc += 0 if np.isnan(acc) else acc
 
         log = 'Evaluation - loss : {}; accuracy : {}'.format(avg_loss/(num_iterations),
                             avg_acc/(num_iterations))
