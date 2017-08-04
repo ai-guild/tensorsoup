@@ -194,6 +194,11 @@ def index(data, metadata):
     # new dict to hold indices
     idx_data = {
             'queries' : [],
+            'candidates' : [],
+            'answers' : [],
+            'ainc' : [],
+            'windows' : [],
+            'window_targets' : []
             }
 
     # iterate through q,c,a
@@ -205,7 +210,7 @@ def index(data, metadata):
         idx_data['queries'].append(words2indices(q.split(' ')))
         # index candidates, answers
         c = words2indices(c)
-        a = w2i(a) if a in w2i else w2i[UNK]
+        a = w2i[a] if a in w2i else w2i[UNK]
 
         idx_data['candidates'].append(c)
         idx_data['answers'].append(a)
@@ -347,25 +352,27 @@ def pad_sequences(idata, metadata):
 
     wsize, msize = metadata['window_size'], metadata['memory_size']
     qlen = metadata['qlen']
+    max_c = metadata['max_candidates']
 
     w2i = metadata['w2i']
 
     def pad_windows(windows):
         return windows +  [ [w2i[PAD]]* wsize ]*(msize-len(windows))
 
-    def pad_query(seq):
-        return seq + [w2i[PAD]]*(qlen-len(seq))
+    def pad_seq(seq, maxlen):
+        return seq + [w2i[PAD]]*(maxlen-len(seq))
 
     def pad_wtargets(wt):
         return list(wt) + [0.]*(msize-len(wt))
 
+
     data = {}
-    for tag in ['train', 'test', 'valid']:
+    for tag in idata.keys():
         data[tag] = {}
 
         n = len(idata[tag]['queries'])
 
-        data[tag]['queries'] = np.array([ pad_query(q) 
+        data[tag]['queries'] = np.array([ pad_seq(q, qlen) 
             for q in idata[tag]['queries'] ], dtype=np.int32).reshape(n, qlen)
         data[tag]['windows'] = np.array([ pad_windows(q) for q in idata[tag]['windows'] ],
                 dtype=np.int32).reshape(n, msize, wsize)
@@ -373,8 +380,8 @@ def pad_sequences(idata, metadata):
                 for wt in idata[tag]['window_targets'] ], dtype=np.float32).reshape(n, msize)
         data[tag]['answers'] = np.array(idata[tag]['answers'], 
                 dtype=np.int32).reshape(n,)
-        data[tag]['candidates'] = np.array(idata[tag]['candidates'], 
-                dtype=np.int32).reshape(n, 10)
+        data[tag]['candidates'] = np.array([ pad_seq(c, max_c)
+            for c in idata[tag]['candidates'] ], dtype=np.int32).reshape(n, max_c)
 
     return data
 

@@ -75,8 +75,8 @@ def fetch_data(tag, path, window_size,
             continue
 
         # collect words
-        words.append(q.split(' '))
-        words.append([ word for wi in w for word in wi ])
+        words.extend(q.split(' '))
+        words.extend([ word for wi in w for word in wi ])
 
         # add to list
         data['queries'].append(q)
@@ -103,13 +103,18 @@ def gather_metadata(data, vocab):
             'w2i' : { w:i for i,w in enumerate(vocab) },
             'i2w' : vocab 
             }
-    qlen, memory_size = 0, 0
+    qlen, memory_size, max_candidates = 0, 0, 0
     for k in data.keys():
-        qlen = max(qlen, max([len(q.split(' ')) for q in data[k]['queries']]))
-        memory_size = max(memory_size, max([len(wi) for wi in data[k]['windows']]))
+        qlen = max(qlen, 
+                max([len(q.split(' ')) for q in data[k]['queries']]))
+        memory_size = max(memory_size, 
+                max([len(wi) for wi in data[k]['windows']]))
+        max_candidates = max(max_candidates, 
+                max([len(c) for c in data[k]['candidates']]))
 
     metadata.update( {
-        'qlen' : qlen, 'memory_size' : memory_size
+        'qlen' : qlen, 'memory_size' : memory_size,
+        'max_candidates' : max_candidates
         })
 
     return metadata
@@ -198,4 +203,4 @@ def gather(path=DATA_DIR, window_size=5, gen=False):
 
 
 if __name__ == '__main__':
-    data, metadata = gather(gen=True)
+    data, metadata = gather()
