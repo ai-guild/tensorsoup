@@ -12,8 +12,8 @@ from collections import OrderedDict
 
 class MemoryNet():
 
-    def __init__(self, hdim, num_hops, memsize, 
-            window_size, sentence_size, vocab_size, 
+    def __init__(self, hdim, num_hops, memsize, window_size, 
+            sentence_size, vocab_size, num_candidates,
             lr1=0.025, lr2=0.025):
 
         # reset graph
@@ -41,7 +41,7 @@ class MemoryNet():
                         name='windows')
                 answers = tf.placeholder(tf.int32, shape=[None, ], 
                         name='answers')
-                candidates = tf.placeholder(tf.int32, shape=[None, 10], 
+                candidates = tf.placeholder(tf.int32, shape=[None, num_candidates], 
                         name='candidates')
                 window_targets = tf.placeholder(tf.int32, shape=[None, memsize],
                         name='window_targets')
