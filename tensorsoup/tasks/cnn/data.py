@@ -30,6 +30,8 @@ class DataSource(object):
         # current iteration
         self.i = 0
 
+    def getN(self, dtype='train'):
+        return self.n[dtype]
 
     def batch(self, i, dtype='train'):
         # fetch 'i'th batch

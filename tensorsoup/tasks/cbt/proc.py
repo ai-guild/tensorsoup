@@ -129,7 +129,8 @@ def gather_metadata(data, vocab):
             'i2w' : vocab,
             'vocab_size' : len(vocab),
             'memory_size' : max([len(wi) for wi in data['windows']]),
-            'special_tokens' : special_tokens
+            'special_tokens' : special_tokens,
+            'max_candidates' : 10
             }
 
 

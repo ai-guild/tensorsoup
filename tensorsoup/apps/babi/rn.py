@@ -12,7 +12,7 @@ from visualizer import Visualizer
 
 if __name__ == '__main__':
 
-    batch_size = 16 
+    batch_size = 512
 
     datasrc = DataSourceAllTasks(datadir='../../../datasets/babi/en-10k/', task_id=0,
             batch_size=batch_size)
@@ -32,34 +32,33 @@ if __name__ == '__main__':
 
     # setup visualizer
     #  by default, writes to ./log/
-    #vis = Visualizer()
-    #vis.attach_scalars(model)
+    vis = Visualizer()
+    vis.attach_scalars(model)
     #vis.attach_params() # histograms of trainable variables
 
     # gpu config
     config = tf.ConfigProto()
-    #config.gpu_options.allow_growth = True
+    config.gpu_options.allow_growth = True
 
     with tf.Session(config=config) as sess:
         # init session
         sess.run(tf.global_variables_initializer())
 
         # add graph to visualizer
-        #vis.attach_graph(sess.graph)
+        vis.attach_graph(sess.graph)
 
         # init trainer
         trainer = Trainer(sess, model, datasrc, batch_size)
 
         # fit model
-        trainer.fit(epochs=600, mode=Trainer.TRAIN, verbose=True)#, visualizer=vis)
+        trainer.fit(epochs=600, mode=Trainer.TRAIN, verbose=True, visualizer=vis)
 
-        '''
-        print('****************************************************************** PRETRAINING OVER ')
         for task_id in reversed(range(21)):
             datasrc.task_id = task_id
             loss, acc = trainer.evaluate()
             print('evaluation loss for task_id = {}\t\tloss = {}\t\t accuracy = {}'.format(task_id, loss, acc))
         
+        '''
         trainer.fit(epochs=600, mode=Trainer.TRAIN, verbose=False, visualizer=vis)
         print('****************************************************************** TRAINING OVER ')
         for task_id in reversed(range(21)):
@@ -67,4 +66,3 @@ if __name__ == '__main__':
             loss, acc = trainer.evaluate()
             print('evaluation loss for task_id = {}\t\tloss = {}\t\t accuracy = {}'.format(task_id, loss, acc))
         '''
-

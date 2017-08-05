@@ -12,7 +12,7 @@ from visualizer import Visualizer
 
 if __name__ == '__main__':
 
-    batch_size = 128
+    batch_size = 512
 
     datasrc = DataSourceAllTasks(datadir='../../../datasets/babi/en-10k/', task_id=0,
             batch_size=batch_size)
@@ -35,7 +35,7 @@ if __name__ == '__main__':
 
     # gpu config
     config = tf.ConfigProto()
-    #config.gpu_options.allow_growth = True
+    config.gpu_options.allow_growth = True
 
     with tf.Session(config=config) as sess:
         # init session
