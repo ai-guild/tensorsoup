@@ -28,6 +28,10 @@ class RelationNet(object):
         # final output shape
         f_hdim[-1] = vocab_size
 
+        # context size : num of sentences in context
+        #  is hardcoded to "20" in the model
+        clen_max = 20
+
         # reset graph
         tf.reset_default_graph()
 
@@ -59,6 +63,10 @@ class RelationNet(object):
             placeholders['context'] = context
             placeholders['answers'] = answers
 
+            # get last 20 sentences in context
+            context_sliced = tf.slice(tf.reverse(context, axis=[1]), 
+                        [0,0,0], [-1,clen_max,-1])
+
             # get batch size
             batch_size = tf.shape(queries)[0]
 
@@ -69,7 +77,7 @@ class RelationNet(object):
                                           initializer=self.init)
 
                 qemb = tf.nn.embedding_lookup(qemb_mat, queries)
-                cemb = tf.nn.embedding_lookup(cemb_mat, context)
+                cemb = tf.nn.embedding_lookup(cemb_mat, context_sliced)
 
             # question LSTM
             with tf.variable_scope('question_lstm'):
@@ -88,9 +96,9 @@ class RelationNet(object):
                 co = []
                 # iterate through sentences in context
                 cemb_reshaped = tf.transpose(cemb, [1,0,2,3])
-                c_reshaped = tf.transpose(context, [1,0,2])
+                c_reshaped = tf.transpose(context_sliced, [1,0,2])
                 #  [clen, batch_size, slen, lstm_units]
-                for i in range(clen):
+                for i in range(clen_max):
                     # get final state
                     context_i = cemb_reshaped[i]
                     _, final_state = tf.nn.dynamic_rnn(c_rcell, 
@@ -165,7 +173,7 @@ class RelationNet(object):
             self.answers = answers
             self.mode = mode
 
-            self.placeholders = [queries, context, answers]
+            self.placeholders = [context, queries, answers]
 
         # execute inference and build graph
         inference()
@@ -174,7 +182,7 @@ class RelationNet(object):
 if __name__ == '__main__':
 
     # instantiate RN
-    rn = RelationNet(clen=10, qlen=12, slen=14,
+    rn = RelationNet(clen=50, qlen=12, slen=14,
             vocab_size = 120, lr=0.0002)
 
     # sanity check

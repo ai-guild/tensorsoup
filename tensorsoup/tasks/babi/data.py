@@ -5,6 +5,10 @@ from six.moves import range, reduce
 from pprint import pprint
 from tasks.babi.proc import load_task, vectorize_data
 
+import os
+import pickle
+
+
 class DataSourceAllTasks(object):
      
     def __init__(self, datadir, task_id=0, batch_size=128):
@@ -68,7 +72,21 @@ class DataSourceAllTasks(object):
         return bi
 
     def fetch(self):
-        
+
+        # if processed files exist
+        #   read pickle and return
+        dataf = self.datadir + '/data.pickle'
+        metaf = self.datadir + '/metadata.pickle'
+
+        if os.path.isfile(dataf) and os.path.isfile(metaf):
+            print(':: <gather> [1/2] Reading from' , dataf)
+            with open(dataf, 'rb') as handle:
+                data = pickle.load(handle)
+            print(':: <gather> [2/2] Reading from' , metaf)
+            with open(metaf, 'rb') as handle:
+                metadata = pickle.load(handle)
+            return data, metadata
+
         def load_all_tasks(data_dir):
             train_data, test_data = [], []
             for i in range(1,21):
@@ -153,6 +171,12 @@ class DataSourceAllTasks(object):
                 'memory_size' : memory_size
                 }
 
+        with open(datadir + '/data.pickle', 'wb') as handle:
+            pickle.dump(data, handle, pickle.HIGHEST_PROTOCOL)
+
+        with open(datadir + '/metadata.pickle', 'wb') as handle:
+            pickle.dump(metadata, handle, pickle.HIGHEST_PROTOCOL)
+
         return data, metadata
 
 
@@ -199,7 +223,7 @@ class DataSource(object):
         return bi
 
     def fetch(self):
-        
+           
         def load_all_tasks(data_dir):
             train_data, test_data = [], []
             for i in range(1,21):

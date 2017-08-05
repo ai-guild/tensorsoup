@@ -75,7 +75,7 @@ class Trainer(object):
         n = model.n
         
         # get count of data
-        num_examples = datasrc.n['train']
+        num_examples = datasrc.getN('train')
         if self.rand:
             num_examples = num_examples * datasrc.random_x
 
