@@ -20,7 +20,7 @@ class Trainer(object):
     def evaluate(self, visualizer=None):
         datasrc = self.datasrc
         batch_size = datasrc.batch_size
-        num_examples = datasrc.n['test']#getN('test')
+        num_examples = datasrc.getN('test')
         model = self.model
 
         # num copies
@@ -35,7 +35,7 @@ class Trainer(object):
         for i in tqdm(range(num_iterations)):
             bi = datasrc.next_batch(n, 'test')
 
-            fetch_data = [model.loss, model.accuracy, model.train_op]
+            fetch_data = [model.loss, model.accuracy]
 
             if visualizer:
                 fetch_data.append(visualizer.summary_op)
@@ -58,6 +58,7 @@ class Trainer(object):
                             avg_acc/(num_iterations))
         tqdm.write(log)
         return avg_loss/num_iterations, avg_acc/(num_iterations)
+    
 
     def fit(self, epochs, eval_interval=10, mode=1, 
             verbose=True, visualizer=None,
