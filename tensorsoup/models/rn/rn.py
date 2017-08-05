@@ -119,6 +119,10 @@ class RelationNet(object):
                     rn_input = tf.concat([object_pair[0], object_pair[1],
                                           qo], axis=-1)
                     rn_inputs.append(rn_input)
+
+                # num of object pairs
+                n_obj_pairs = len(rn_inputs)
+
                 # concat to tensor
                 rn_inputs = tf.concat(rn_inputs, axis=0)
 
@@ -127,7 +131,7 @@ class RelationNet(object):
                 g = rn_inputs
                 for hdim in g_hdim:
                     g = tf.contrib.layers.fully_connected(g, hdim)
-                g = tf.reshape(g, [-1,batch_size, hdim])
+                g = tf.reshape(g, [n_obj_pairs, batch_size, g_hdim[-1]])
 
             # f(theta)
             with tf.variable_scope('f_phi', reuse=None) as scope:
@@ -173,6 +177,9 @@ class RelationNet(object):
             self.answers = answers
             self.mode = mode
 
+            # debug
+            self.g = g
+
             self.placeholders = [context, queries, answers]
 
         # execute inference and build graph
@@ -186,4 +193,5 @@ if __name__ == '__main__':
             vocab_size = 120, lr=0.0002)
 
     # sanity check
-    print(sanity(rn.logits, fetch_data=True))
+    op = sanity(rn.g, fetch_data=True)
+    print(op.shape)
