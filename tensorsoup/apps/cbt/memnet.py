@@ -14,7 +14,7 @@ from visualizer import Visualizer
 if __name__ == '__main__':
 
     # optimal hyperparamters
-    batch_size = 120
+    batch_size = 512
     window_size = 5
 
     datasrc = DataSource(datadir='../../../datasets/CBTest/data/', 
@@ -25,10 +25,11 @@ if __name__ == '__main__':
     # get vocab size from data source
     vocab_size = datasrc.metadata['vocab_size']
     memsize = datasrc.metadata['memory_size']
-    sentence_size = datasrc.metadata['max_query_len']
+    sentence_size = datasrc.metadata['qlen']
 
     # instantiate model
     model = MemoryNet(hdim=300, num_hops=1, memsize=memsize, 
+                      num_candidates =10,
                       window_size= window_size,
                       sentence_size=sentence_size, 
                       vocab_size=vocab_size,
@@ -42,7 +43,7 @@ if __name__ == '__main__':
 
     # gpu config
     config = tf.ConfigProto()
-    #config.gpu_options.allow_growth = True
+    config.gpu_options.allow_growth = True
 
     with tf.Session(config=config) as sess:
         # init session
