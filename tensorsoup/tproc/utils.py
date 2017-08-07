@@ -77,3 +77,22 @@ def pad_sequences(seqs, maxlen, metadata):
 
 def list_of_files(path):
     return [ path + '/' + fname for fname in os.listdir(path) ]
+
+# index sequence with any number of levels
+def index_seq(seq, w2i):
+    
+    def index_sentence(seq):
+        # check if we are at the bottom of hierarchy
+        if type(seq) == str:
+            # get words
+            words = seq.split(' ')
+            # check if sequence is just a word
+            if len(words) == 1:
+                w = words[0]
+                return w2i[w] if w in w2i else w2i['unk']
+            return [w2i[w] for w in words]
+        # we need to go deeper
+        else:
+            return [ index_sentence(item) for item in seq ]
+    
+    return index_sentence(seq)
