@@ -27,7 +27,8 @@ class DataFeed(object):
         # start over
         self.offset = 0
         # get num of examples
-        self.n = len(data[data.keys()[0]])
+        #  get a value from dict
+        self.n = len(list(data.values())[0])
         # bind data to instance
         self.data = data
 
@@ -52,7 +53,7 @@ class DataFeed(object):
         self.offset += batch_size
 
         # select items from data format
-        return [ self.data[k][s:e] for k in dformat ]
+        return [ self.data[k][s:e] for k in self.dformat ]
 
 
     '''

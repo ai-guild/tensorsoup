@@ -250,11 +250,28 @@ def gather(dtype, task=0):
 
     # check task > 0
     if task:
-        return data[task], data[task]['metadata']
+        return pad(data[task], data[task]['metadata'])
 
-    return { 'train' : data['train'],
-            'test' : data['test'] }, metadata
+    return pad({ 'train' : data['train'],
+            'test' : data['test'] }, metadata)
         
+
+def pad(data, metadata):
+    clen, slen, qlen = [ metadata[k] for k in ['clen', 'slen', 'qlen' ] ]
+    padded_data = {}
+
+    for k in ['train', 'test']:
+        padded_data[k] = { 
+            'contexts' : pad_sequences(data[k]['contexts'],
+                maxlens = [clen, slen], metadata=metadata),
+            'questions' : pad_sequences(data[k]['questions'],
+                maxlens = [0, slen], metadata=metadata),
+            'answers' : data[k]['answers'],
+            'supports' : data[k]['supports']
+            }
+
+    return padded_data, metadata
+
 
 
 if __name__ == '__main__':

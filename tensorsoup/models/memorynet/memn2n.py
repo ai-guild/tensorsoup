@@ -12,7 +12,7 @@ from collections import OrderedDict
 class MemoryNet(object):
 
     def __init__(self, hdim, num_hops, memsize, sentence_size, 
-                 vocab_size, lr=0.01):
+                 vocab_size, num_candidates, lr=0.01):
 
         # reset graph
         tf.reset_default_graph()
@@ -97,7 +97,7 @@ class MemoryNet(object):
 
             with tf.name_scope('output'):
                 # answer selection
-                W = tf.get_variable('W', dtype=tf.float32, shape=[hdim, vocab_size],
+                W = tf.get_variable('W', dtype=tf.float32, shape=[hdim, num_candidates],
                                    initializer=self.init)
                 logits = tf.matmul(u[-1], W)
 
@@ -145,11 +145,3 @@ class MemoryNet(object):
                 encoding[i-1, j-1] = (i - (le-1)/2) * (j - (ls-1)/2)
         encoding = 1 + 4 * encoding / embedding_size / sentence_size
         return np.transpose(encoding)
-
-
-
-if __name__ == '__main__':
-
-    memnet = MemoryNet(num_hops=3, hdim=150, vocab_size=1000, lr=0.001)
-
-    print(sanity([memnet.loss, memnet.train_op]))

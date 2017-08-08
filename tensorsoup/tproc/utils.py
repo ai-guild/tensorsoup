@@ -56,24 +56,19 @@ def filter_by(idata, cond):
                 data[k].append(item)
     return data
 
-def pad_sequences(seqs, maxlen, metadata):
-    '''
-        assumption
+def pad_sequences(seqs, maxlens, metadata):
 
-            seqs : list of list of indices (of words) of variable size
-    '''
-    # num of sequences
-    n = len(seqs)
-    # special tokens -> PAD
-    #  word to index
     PAD, w2i = metadata['special_tokens'][0], metadata['w2i']
-    # shape : [n, maxlen]
+    PAD = w2i[PAD]
+    
+    def pad_seq(seq):
+        if type(seq[0]) is not list:
+            return seq + [PAD]*(maxlens[-1]-len(seq))
 
-    # for each sequence
-    pad_seq = lambda seq : seq + [w2i[PAD]]*(maxlen-len(seq))
-    # return padded nd.array
-    return np.array([ pad_seq(seq) 
-        for seq in seqs ], dtype=np.int32).reshape(n, maxlen)
+        padded_seq = seq + [[PAD]*maxlens[-1]]*(maxlens[-2]-len(seq))
+        return [ pad_seq(s) for s in padded_seq ]
+    
+    return np.array([ pad_seq(seq) for seq in seqs ])
 
 def list_of_files(path):
     return [ path + '/' + fname for fname in os.listdir(path) ]
