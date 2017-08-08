@@ -16,3 +16,8 @@
 - Sometimes trainer requires to train/evaluate model on a subset of data
 - `proc` builds and returns this subset of data depending on an id or name
 - Dynamically bind new subset of data to DataLoader (`update_data`)
+
+**DATA FEED**
+
+- Build a data feed, that will accept data dictionary
+- Instantiate and maintain 2 copies of data feed, one for train and one for test (in app)
