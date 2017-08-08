@@ -5,59 +5,54 @@ sys.path.append('../../')
 
 from models.memorynet.memn2n import MemoryNet
 from train.trainer import Trainer
-from tasks.babi.data import DataSource, DataSourceAllTasks
+from tasks.babi.proc import gather
+from datafeed import DataFeed
 
 from visualizer import Visualizer
 
 
 if __name__ == '__main__':
 
-    batch_size = 512
+    batch_size = 128
 
-    datasrc = DataSourceAllTasks(datadir='../../../datasets/babi/en-10k/', task_id=0,
-            batch_size=batch_size)
+    # get task 1
+    task = 1
+    data, metadata = gather('1k', task)
 
-    # get vocab size from data source
-    vocab_size = datasrc.metadata['vocab_size']
-    memsize = datasrc.metadata['memory_size']
-    sentence_size = datasrc.metadata['sentence_size']
+    # gather info from metadata
+    num_candidates = metadata['candidates']['vocab_size']
+    vocab_size = metadata['vocab_size']
+    memsize = metadata['clen']
+    sentence_size = metadata['slen']
+
+    # build data format
+    dformat = [ 'contexts', 'questions', 'answers' ]
+
+    # create feeds
+    trainfeed = DataFeed(dformat, data=data['train'])
+    testfeed  = DataFeed(dformat, data=data['test' ])
 
     # instantiate model
-    model = MemoryNet(hdim=50, num_hops=3, memsize=memsize, 
-                      sentence_size=sentence_size, vocab_size=vocab_size,
+    model = MemoryNet(hdim=20, num_hops=3, memsize=memsize, 
+                      sentence_size=sentence_size, 
+                      vocab_size=vocab_size,
+                      num_candidates = num_candidates,
                       lr = 0.001)
 
-    # setup visualizer
-    #  by default, writes to ./log/
-    vis = Visualizer()
-    vis.attach_scalars(model)
-    vis.attach_params() # histograms of trainable variables
-
-    # gpu config
-    config = tf.ConfigProto()
-    config.gpu_options.allow_growth = True
-
-    with tf.Session(config=config) as sess:
+    with tf.Session() as sess:
         # init session
         sess.run(tf.global_variables_initializer())
 
-        # add graph to visualizer
-        vis.attach_graph(sess.graph)
+        # create trainer
+        trainer = Trainer(sess, model, trainfeed, testfeed,
+                batch_size = batch_size)
 
-        # init trainer
-        trainer = Trainer(sess, model, datasrc, batch_size)
-
-        # fit model
-        trainer.fit(epochs=600, mode=Trainer.PRETRAIN, verbose=True, visualizer=vis)
-        print('****************************************************************** PRETRAINING OVER ')
-        for task_id in reversed(range(21)):
-            datasrc.task_id = task_id
-            loss, acc = trainer.evaluate()
-            print('evaluation loss for task_id = {}\t\tloss = {}\t\t accuracy = {}'.format(task_id, loss, acc))
+        print('\n:: [1/2] Pretraining')
+        # pretrain
+        trainer.fit(epochs=100000, eval_interval=100, 
+                mode=Trainer.PRETRAIN, verbose=False)
         
-        trainer.fit(epochs=600, mode=Trainer.TRAIN, verbose=False, visualizer=vis)
-        print('****************************************************************** TRAINING OVER ')
-        for task_id in reversed(range(21)):
-            datasrc.task_id = task_id
-            loss, acc = trainer.evaluate()
-            print('evaluation loss for task_id = {}\t\tloss = {}\t\t accuracy = {}'.format(task_id, loss, acc))
+        print('\n:: [1/2] Training')
+        # train
+        trainer.fit(epochs=10000, eval_interval=100, 
+                mode=Trainer.TRAIN, verbose=False)
