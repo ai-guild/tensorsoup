@@ -10,123 +10,135 @@ class Trainer(object):
     TRAIN = 1
     TEST = 2
 
-    def __init__(self, sess, model, datasrc, batch_size, rand=None):
+    def __init__(self, sess, model, trainfeed, testfeed, batch_size=1):
         self.model = model
-        self.datasrc = datasrc
+        self.trainfeed = trainfeed
+        self.testfeed = testfeed
         self.sess = sess
-        self.rand = rand
-        
+        self.batch_size = batch_size
 
-    def evaluate(self, visualizer=None):
-        datasrc = self.datasrc
-        batch_size = datasrc.batch_size
-        num_examples = datasrc.getN('test')
+
+    def evaluate(self, feed=None, batch_size=None, visualizer=None):
+        # convenience
         model = self.model
 
-        # num copies
-        n = model.n
+        # set feed
+        feed = feed if feed else self.testfeed
+        # set batch size
+        batch_size = batch_size if batch_size else self.batch_size
+            
 
-        num_iterations = int(num_examples / (batch_size*n))
+        # get num of examples
+        num_examples = feed.getN()
+        # get num of iterations
+        num_iterations = num_examples // batch_size
 
-        build_feed = self.build_feed_dict if n == 1 else self.build_feed_dict_multi
-
+        # maintain avg loss, accuracy
         avg_loss, avg_acc = 0., 0.
+        for i in range(num_iterations):
+            # get next batch
+            bi = feed.next_batch(batch_size)
 
-        for i in tqdm(range(num_iterations)):
-            bi = datasrc.next_batch(n, 'test')
-
+            # fetch loss and accuracy from graph
             fetch_data = [model.loss, model.accuracy]
 
+            # add summary op to fetch_data if necessary
             if visualizer:
                 fetch_data.append(visualizer.summary_op)
+            
+            # build feed_dict
+            feed_dict = self.extra_params(self.TEST, 
+                    self.build_feed_dict(model.placeholders, bi))
 
-            feed_dict = self.extra_params(self.TEST, build_feed(model.placeholders, bi))
+            # execute graph in session
             results = self.sess.run( fetch_data,
                                      feed_dict = feed_dict)
-
+            # get loss, accuracy
             l, acc = results[:2]
 
+            # log visualization summary
             if visualizer:
                 if i % visualizer.interval == 0:
                     visualizer.eval_log(results[-1], i)
 
-
+            # maintain average loss, accuracy
             avg_loss += 10 if np.isnan(l) else l
             avg_acc += 0 if np.isnan(acc) else acc
 
+        # print info
         log = 'Evaluation - loss : {}; accuracy : {}'.format(avg_loss/(num_iterations),
                             avg_acc/(num_iterations))
         tqdm.write(log)
+
+        # return average loss and accuracy
         return avg_loss/num_iterations, avg_acc/(num_iterations)
     
 
-    def fit(self, epochs, eval_interval=10, mode=1, 
-            verbose=True, visualizer=None,
-            early_stop=True):
+    def fit(self, epochs, eval_interval=0, mode=1, 
+            batch_size=None, feed=None, verbose=True, 
+            visualizer=None, early_stop=True):
 
         def tq(x):
             return tqdm(x) if verbose else x
 
         model = self.model
-        datasrc = self.datasrc
-        batch_size = self.datasrc.batch_size
         sess = self.sess
 
-        # num copies of model
-        n = model.n
-        
-        # get count of data
-        num_examples = datasrc.getN('train')
-        if self.rand:
-            num_examples = num_examples * datasrc.random_x
+        # set batch size
+        batch_size = batch_size if batch_size else self.batch_size
+        # set feed
+        feed = feed if feed else self.trainfeed
 
-        num_iterations = int(num_examples/(batch_size*n))
+        # get num of iterations
+        num_examples = feed.getN()
+        num_iterations = num_examples//batch_size
 
-        build_feed = self.build_feed_dict if n == 1 else self.build_feed_dict_multi
+        #build_feed = self.build_feed_dict if n == 1 else self.build_feed_dict_multi
+
         loss_trend = []
         for i in range(epochs):
-            avg_loss, avg_acc = 0., 0.
+            avg_loss = 0.
             for j in tq(range(num_iterations)):
 
-                next_batch = datasrc.next_random_batch if self.rand else datasrc.next_batch
-
-                bj = next_batch(n, 'train')
+                bj = feed.next_batch()
 
                 # fetch items
-                fetch_data = [model.loss, model.accuracy, model.train_op]
+                fetch_data = [model.loss, model.train_op]
 
                 if visualizer:
                     fetch_data.append(visualizer.summary_op)
                     
-                feed_dict = self.extra_params(mode, build_feed(model.placeholders, bj))
+                feed_dict = self.extra_params(mode, 
+                        self.build_feed_dict(model.placeholders, bj))
 
                 results = sess.run( fetch_data, 
                                     feed_dict = feed_dict)
                 
-                l, acc = results[:2]
+                l = results[0]
 
                 if visualizer:
                     if i % visualizer.interval == 0:
                         visualizer.train_log(results[-1], j)
 
-                # accumulate loss, accuracy
+                # accumulate loss
                 avg_loss += l
-                avg_acc += acc
 
             if verbose:
-                log = '[{}] loss : {}; accuracy : {}'.format(i,
-                        avg_loss/(num_iterations), avg_acc/(num_iterations))
+                log = '[{}] loss : {}'.format(i, 
+                        avg_loss/(num_iterations))
                 tqdm.write(log)
             
             # eval
-            if i and i%eval_interval == 0:
-                eloss = self.evaluate(visualizer)
-                loss_trend.append(eloss)
+            if eval_interval:
+                if i and i%eval_interval == 0:
+                    eloss = self.evaluate(visualizer)
+                    loss_trend.append(eloss)
 
-                if early_stop:
-                    if early_stopping(loss_trend):
-                        tqdm.write('stopping from early stopping')
-                        return
+                    if early_stop:
+                        if early_stopping(loss_trend):
+                            tqdm.write('stopping from early stopping')
+                            return
+
 
     def build_feed_dict_multi(self, ll1, ll2):
         feed_dict = {}
