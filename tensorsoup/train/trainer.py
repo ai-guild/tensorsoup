@@ -10,15 +10,24 @@ class Trainer(object):
     TRAIN = 1
     TEST = 2
 
-    def __init__(self, sess, model, trainfeed, testfeed, batch_size=1):
+    def __init__(self, sess, model,
+            trainfeed=None, testfeed=None, # optional data feeds
+            lr=0.001,  # learning rate
+            batch_size=1):
+ 
         self.model = model
         self.trainfeed = trainfeed
         self.testfeed = testfeed
         self.sess = sess
         self.batch_size = batch_size
+        self.lr = lr
 
 
-    def evaluate(self, feed=None, batch_size=None, visualizer=None):
+    def evaluate(self, feed=None, 
+            batch_size=None,
+            lr = None, # learning rate
+            visualizer=None):
+
         # convenience
         model = self.model
 
@@ -26,7 +35,8 @@ class Trainer(object):
         feed = feed if feed else self.testfeed
         # set batch size
         batch_size = batch_size if batch_size else self.batch_size
-            
+        # set learning rate
+        lr = lr if lr else self.lr
 
         # get num of examples
         num_examples = feed.getN()
@@ -47,8 +57,9 @@ class Trainer(object):
                 fetch_data.append(visualizer.summary_op)
             
             # build feed_dict
-            feed_dict = self.extra_params(self.TEST, 
-                    self.build_feed_dict(model.placeholders, bi))
+            feed_dict = self.extra_params(
+                    self.build_feed_dict(model.placeholders, bi), # feed_dict
+                    self.TEST)
 
             # execute graph in session
             results = self.sess.run( fetch_data,
@@ -71,10 +82,15 @@ class Trainer(object):
         tqdm.write(log)
 
         # return average loss and accuracy
-        return avg_loss/num_iterations, avg_acc/(num_iterations)
+        acc = avg_acc/num_iterations
+        loss = avg_loss/num_iterations
+        acc = acc if acc else 0
+        loss = loss if loss else 100
+        return loss, acc
     
 
-    def fit(self, epochs, eval_interval=0, mode=1, 
+    def fit(self, epochs, 
+            eval_interval=0, mode=1, lr=None,
             batch_size=None, feed=None, verbose=True, 
             visualizer=None, early_stop=True):
 
@@ -88,6 +104,8 @@ class Trainer(object):
         batch_size = batch_size if batch_size else self.batch_size
         # set feed
         feed = feed if feed else self.trainfeed
+        # set learning rate
+        lr = lr if lr else self.lr
 
         # get num of iterations
         num_examples = feed.getN()
@@ -95,7 +113,7 @@ class Trainer(object):
 
         #build_feed = self.build_feed_dict if n == 1 else self.build_feed_dict_multi
 
-        loss_trend = []
+        loss_trend, accuracies = [], []
         for i in range(epochs):
             avg_loss = 0.
             for j in tq(range(num_iterations)):
@@ -108,12 +126,15 @@ class Trainer(object):
                 if visualizer:
                     fetch_data.append(visualizer.summary_op)
                     
-                feed_dict = self.extra_params(mode, 
-                        self.build_feed_dict(model.placeholders, bj))
+                # build feed_dict
+                feed_dict = self.extra_params(
+                        self.build_feed_dict(model.placeholders, bj), 
+                        mode, lr)
+
 
                 results = sess.run( fetch_data, 
                                     feed_dict = feed_dict)
-                
+
                 l = results[0]
 
                 if visualizer:
@@ -127,17 +148,28 @@ class Trainer(object):
                 log = '[{}] loss : {}'.format(i, 
                         avg_loss/(num_iterations))
                 tqdm.write(log)
+
+            # update lr
+            #if i and i%25 == 0:
+            #    lr = lr/2 # anneal
+
             
             # eval
             if eval_interval:
                 if i and i%eval_interval == 0:
-                    eloss = self.evaluate(visualizer)
+                    eloss, eacc = self.evaluate(visualizer)
                     loss_trend.append(eloss)
+                    accuracies.append(eacc)
 
                     if early_stop:
-                        if early_stopping(loss_trend):
+                        if early_stopping(loss_trend) or eacc > 0.95:
                             tqdm.write('stopping from early stopping')
-                            return
+                            # return max evaluation accuracy
+                            return max(accuracies)
+
+        # end of epochs
+        return max(accuracies)
+
 
 
     def build_feed_dict_multi(self, ll1, ll2):
@@ -154,8 +186,10 @@ class Trainer(object):
     def build_feed_dict(self, l1, l2):
         return { i:j for i,j in zip(l1,l2)}
 
-    def extra_params(self, mode, feed_dict):
+    def extra_params(self, feed_dict, mode, lr=None):
         feed_dict[self.model.mode] = mode
+        if lr:
+            feed_dict[self.model.lr] = lr
         return feed_dict
 
 

@@ -11,8 +11,9 @@ from collections import OrderedDict
 
 class MemoryNet(object):
 
-    def __init__(self, hdim, num_hops, memsize, sentence_size, 
-                 vocab_size, num_candidates, lr=0.01):
+    def __init__(self, hdim, num_hops, 
+            memsize, sentence_size, qlen, 
+            vocab_size, num_candidates):
 
         # reset graph
         tf.reset_default_graph()
@@ -23,22 +24,22 @@ class MemoryNet(object):
         # num of copies of model (for multigpu training)
         self.n = 1
 
-        #optimizer = tf.train.AdagradOptimizer(learning_rate=lr)
-        optimizer = tf.train.AdamOptimizer(learning_rate=lr)
-
+        #optimizer = tf.train.AdamOptimizer(learning_rate=lr)
 
         def inference():
 
             with tf.name_scope('input'):
                 # build placeholders
-                questions = tf.placeholder(tf.int32, shape=[None, sentence_size], 
+                questions = tf.placeholder(tf.int32, shape=[None, qlen], 
                                            name='questions' )
                 stories = tf.placeholder(tf.int32, shape=[None, memsize, sentence_size],
                                          name='stories' )
 
                 answers = tf.placeholder(tf.int32, shape=[None, ],
                                          name='answers' )
+                # default placeholders
                 mode = tf.placeholder(tf.int32, shape=[], name='mode')
+                lr = tf.placeholder(tf.float32, shape=[], name='lr')
                 
             # expose handle to placeholders
             placeholders = OrderedDict()
@@ -47,12 +48,17 @@ class MemoryNet(object):
             placeholders['answers'] = answers
 
             # inject noise to memories
-            dropout = tf.random_normal([memsize, 1], mean=0) > -2
+            dropout = tf.random_uniform([memsize, 1], 0, 1) > 0.1
             noisy_stories = stories * tf.cast(dropout, tf.int32)
-            noisy_stories = tf.reverse(noisy_stories, axis=[1])
+            #noisy_stories = tf.reverse(noisy_stories, axis=[1])
+
+            _stories = tf.cond(mode<2,
+                        lambda : noisy_stories,
+                        lambda : stories)
 
             # position encoding
-            encoding = tf.constant(self.position_encoding(sentence_size, hdim))
+            sent_encoding = tf.constant(self.position_encoding(sentence_size, hdim))
+            ques_encoding = tf.constant(self.position_encoding(qlen, hdim))
 
             # embedding
             with tf.name_scope('embeddings'):
@@ -66,7 +72,7 @@ class MemoryNet(object):
             with tf.name_scope('question'):
                 # embed questions
                 u0 = tf.nn.embedding_lookup(B, questions)
-                u0 = tf.reduce_sum(u0*encoding, axis=1)
+                u0 = tf.reduce_sum(u0*ques_encoding, axis=1)
                 u = [u0] # accumulate question emb
 
             with tf.name_scope('temporal'):
@@ -82,9 +88,9 @@ class MemoryNet(object):
                 # memory loop
                 for i in range(num_hops):
                     # embed stories
-                    m = tf.nn.embedding_lookup(A[i], noisy_stories)
-                    m = tf.reduce_sum(m*encoding, axis=2) + TA[i]
-                    c = tf.nn.embedding_lookup(C[i], noisy_stories)
+                    m = tf.nn.embedding_lookup(A[i], _stories)
+                    m = tf.reduce_sum(m*sent_encoding, axis=2) + TA[i]
+                    c = tf.nn.embedding_lookup(C[i], _stories)
                     c = tf.reduce_sum(c, axis=2) + TC[i]
 
                     score = tf.reduce_sum(m*tf.expand_dims(u[-1], axis=1), axis=-1)
@@ -108,7 +114,8 @@ class MemoryNet(object):
                     labels=answers
                     )
                 # attach loss to instance
-                loss = tf.reduce_mean(cross_entropy)
+                #loss = tf.reduce_sum(cross_entropy)
+                loss = cross_entropy
 
             with tf.name_scope('evaluation'):
                 # evaluation
@@ -118,16 +125,19 @@ class MemoryNet(object):
 
             with tf.name_scope('optimization'):
                 # gradient clipping
+                optimizer = tf.train.AdamOptimizer(learning_rate=lr)
+                #optimizer = tf.train.GradientDescentOptimizer(learning_rate=lr)
                 gvs = optimizer.compute_gradients(loss)
                 clipped_gvs = [(tf.clip_by_norm(grad, 40.), var) for grad, var in gvs]
                 self.train_op = optimizer.apply_gradients(clipped_gvs)
 
-            self.loss = loss
+            self.loss = tf.reduce_mean(loss)
             self.accuracy = accuracy
             self.stories = stories
             self.questions = questions
             self.answers = answers
             self.mode = mode
+            self.lr = lr
             
             self.placeholders = [stories, questions, answers]
 
@@ -135,13 +145,13 @@ class MemoryNet(object):
         inference()
 
 
-    def position_encoding(self, sentence_size, embedding_size):
+    def position_encoding(self, slen, embedding_size):
 
-        encoding = np.ones((embedding_size, sentence_size), dtype=np.float32)
-        ls = sentence_size+1
+        encoding = np.ones((embedding_size, slen), dtype=np.float32)
+        ls = slen+1
         le = embedding_size+1
         for i in range(1, le):
             for j in range(1, ls):
                 encoding[i-1, j-1] = (i - (le-1)/2) * (j - (ls-1)/2)
-        encoding = 1 + 4 * encoding / embedding_size / sentence_size
+        encoding = 1 + 4 * encoding / embedding_size / slen
         return np.transpose(encoding)
