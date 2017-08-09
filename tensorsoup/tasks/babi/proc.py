@@ -16,7 +16,7 @@ TAGS = [ TRAIN, TEST ]
 
 PAD = '<pad>' 
 UNK = '<unk>'
-special_tokens = [PAD, UNK]
+special_tokens = [PAD]
 
 KEYS = [ 'contexts', 'questions', 'answers', 'supports', 'vocab' ]
 
@@ -110,6 +110,9 @@ def process_file(filename):
         answers.extend(a)
         supports.extend(s)
 
+    # reverse contexts
+    contexts = [ c[::-1] for c in contexts ]
+
     # build dictionary
     struc_text= {
             'contexts' : contexts,
@@ -130,10 +133,10 @@ def gather_metadata(train, test):
         data[k] = train[k] + test[k]
 
     # combined vocab
-    vocab = special_tokens + list(set(data['vocab']))
+    vocab = special_tokens + sorted(list(set(data['vocab'])))
 
     # candidates vocab
-    cvocab = list(set(data['answers']))
+    cvocab = sorted(list(set(data['answers'])))
 
     return {
             'slen' : max([len(s.split(' ')) 
@@ -142,7 +145,7 @@ def gather_metadata(train, test):
             'w2i' : { w:i for i,w in enumerate(vocab) },
             'i2w' : vocab,
             'vocab_size' : len(vocab),
-            'clen' : max([len(c) for c in data['contexts']]),
+            'clen' : min(max([len(c) for c in data['contexts']]), 50),
             'special_tokens' : special_tokens,
             'candidates' : {
                 'vocab_size' : len(cvocab),
@@ -260,12 +263,14 @@ def pad(data, metadata):
     clen, slen, qlen = [ metadata[k] for k in ['clen', 'slen', 'qlen' ] ]
     padded_data = {}
 
+    memory_size = min(clen, 50)
+
     for k in ['train', 'test']:
         padded_data[k] = { 
             'contexts' : pad_sequences(data[k]['contexts'],
-                maxlens = [clen, slen], metadata=metadata),
+                maxlens = [memory_size, slen], metadata=metadata),
             'questions' : pad_sequences(data[k]['questions'],
-                maxlens = [0, slen], metadata=metadata),
+                maxlens = [0, qlen], metadata=metadata),
             'answers' : data[k]['answers'],
             'supports' : data[k]['supports']
             }

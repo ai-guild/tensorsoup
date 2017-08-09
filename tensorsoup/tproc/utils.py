@@ -65,7 +65,11 @@ def pad_sequences(seqs, maxlens, metadata):
         if type(seq[0]) is not list:
             return seq + [PAD]*(maxlens[-1]-len(seq))
 
-        padded_seq = seq + [[PAD]*maxlens[-1]]*(maxlens[-2]-len(seq))
+        if len(seq) > maxlens[-2]:
+            padded_seq = seq[:maxlens[0]]
+        else:
+            padded_seq = seq + [[PAD]*maxlens[-1]]*(maxlens[0]-len(seq))
+
         return [ pad_seq(s) for s in padded_seq ]
     
     return np.array([ pad_seq(seq) for seq in seqs ])
