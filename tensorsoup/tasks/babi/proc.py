@@ -10,6 +10,8 @@ from tproc.utils import *
 DATA_DIR_1K = '../../../datasets/babi/en/'
 DATA_DIR_10K = '../../../datasets/babi/en-10k/'
 
+MAX_MEMORY_SIZE = 50
+
 TRAIN = 'train'
 TEST = 'test'
 TAGS = [ TRAIN, TEST ]
@@ -19,6 +21,7 @@ UNK = '<unk>'
 special_tokens = [PAD]
 
 KEYS = [ 'contexts', 'questions', 'answers', 'supports', 'vocab' ]
+
 
 def read_from_file(filename):
     with open(filename) as f:
@@ -145,7 +148,7 @@ def gather_metadata(train, test):
             'w2i' : { w:i for i,w in enumerate(vocab) },
             'i2w' : vocab,
             'vocab_size' : len(vocab),
-            'clen' : min(max([len(c) for c in data['contexts']]), 50),
+            'clen' : min(max([len(c) for c in data['contexts']]), MAX_MEMORY_SIZE),
             'special_tokens' : special_tokens,
             'candidates' : {
                 'vocab_size' : len(cvocab),
@@ -267,7 +270,7 @@ def pad(data, metadata):
     clen, slen, qlen = [ metadata[k] for k in ['clen', 'slen', 'qlen' ] ]
     padded_data = {}
 
-    memory_size = min(clen, 50)
+    memory_size = min(clen, MAX_MEMORY_SIZE)
 
     for k in ['train', 'test']:
         padded_data[k] = { 

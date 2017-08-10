@@ -1,7 +1,8 @@
 from tqdm import tqdm
 import tensorflow as tf
-
 import numpy as np
+
+from graph import *
 
 
 class Trainer(object):
@@ -92,7 +93,7 @@ class Trainer(object):
     def fit(self, epochs, 
             eval_interval=0, mode=1, lr=None,
             batch_size=None, feed=None, verbose=True, 
-            visualizer=None, early_stop=True):
+            visualizer=None, early_stop_after=1):
 
         def tq(x):
             return tqdm(x) if verbose else x
@@ -114,6 +115,7 @@ class Trainer(object):
         #build_feed = self.build_feed_dict if n == 1 else self.build_feed_dict_multi
 
         loss_trend, accuracies = [], []
+        model_params = None
         for i in range(epochs):
             avg_loss = 0.
             for j in tq(range(num_iterations)):
@@ -161,15 +163,28 @@ class Trainer(object):
                     loss_trend.append(eloss)
                     accuracies.append(eacc)
 
-                    if early_stop:
+                    # check if accuracy is better
+                    if len(accuracies) > 2 and eacc > max(accuracies[:-1]):
+                        # save model params
+                        model_params = sess.run(tf.trainable_variables())
+
+                    if early_stop_after and i > early_stop_after:
                         if early_stopping(loss_trend) or eacc > 0.95:
                             tqdm.write('stopping from early stopping')
+
+                            # set best performing model params
+                            if model_params:
+                                print(':: Setting best model params')
+                                sess.run(set_op(model_params))
+
                             # return max evaluation accuracy
                             return max(accuracies)
 
+        # set best performing model params
+        if model_params:
+            sess.run(set_op(model_params))
         # end of epochs
         return max(accuracies)
-
 
 
     def build_feed_dict_multi(self, ll1, ll2):
