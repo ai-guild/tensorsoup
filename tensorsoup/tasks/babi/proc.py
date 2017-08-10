@@ -252,8 +252,12 @@ def gather(dtype, task=0):
         data, metadata = process(path[dtype], dtype)
 
     # check task > 0
-    if task:
+    #  return separate tasks
+    if task > 0:
         return pad(data[task], data[task]['metadata'])
+
+    if task == -1: # return all separate tasks
+        return [ pad(data[i], data[i]['metadata']) for i in range(1,21) ]
 
     return pad({ 'train' : data['train'],
             'test' : data['test'] }, metadata)
