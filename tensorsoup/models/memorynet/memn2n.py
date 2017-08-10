@@ -50,8 +50,10 @@ class MemoryNet(object):
 
             # inject noise to memories
             dropout = tf.random_uniform([memsize, 1], 0, 1) > 0.1
-            noisy_stories = stories * tf.cast(dropout, tf.int32)
-            #noisy_stories = tf.reverse(noisy_stories, axis=[1])
+            # shape to match stories
+            dropout = tf.cast(dropout, tf.int32)* tf.ones(
+                    [memsize, sentence_size], tf.int32)
+            noisy_stories = stories * dropout
 
             _stories = tf.cond(mode<2,
                         lambda : noisy_stories,
