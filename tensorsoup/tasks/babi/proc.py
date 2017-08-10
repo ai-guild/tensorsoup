@@ -275,11 +275,12 @@ def pad(data, metadata):
                 maxlens = [memory_size, slen], metadata=metadata),
             'questions' : pad_sequences(data[k]['questions'],
                 maxlens = [0, qlen], metadata=metadata),
-            'answers' : data[k]['answers'],
-            'supports' : data[k]['supports']
+            'answers' : np.array(data[k]['answers']),
+            'supports' : np.array(data[k]['supports'])
             }
 
-    return padded_data, metadata
+    # TODO : separate shuffle from pad
+    return shuffle(padded_data), metadata
 
 
 

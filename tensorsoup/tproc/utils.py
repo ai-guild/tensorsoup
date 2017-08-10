@@ -95,3 +95,17 @@ def index_seq(seq, w2i):
             return [ index_sentence(item) for item in seq ]
     
     return index_sentence(seq)
+
+def shuffle(data):
+
+    def _shuffle(data_):
+        # get count
+        n = len(list(data_.values())[0])
+        # get indices and shuffle
+        indices = np.array(range(n))
+        np.random.shuffle(indices) # NOTE : in-place
+        # iterate through data dictionary
+        #  get shuffled arrays
+        return { k:data_[k][indices] for k in data_.keys() }
+
+    return { k:_shuffle(data[k]) for k in data.keys() }
