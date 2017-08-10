@@ -5,6 +5,7 @@ import sys
 sys.path.append('../../')
 
 from sanity import *
+from models.memorynet.modules import *
 
 from collections import OrderedDict
 
@@ -62,12 +63,20 @@ class MemoryNet(object):
 
             # embedding
             with tf.name_scope('embeddings'):
-                A = tf.get_variable('A', shape=[num_hops, vocab_size, hdim], dtype=tf.float32, 
-                                   initializer=self.init)
-                B = tf.get_variable('B', shape=[vocab_size, hdim], dtype=tf.float32, 
-                                   initializer=self.init)
-                C = tf.get_variable('C', shape=[num_hops, vocab_size, hdim], dtype=tf.float32, 
-                                   initializer=self.init)
+                A = mask_emb(tf.get_variable('A', 
+                    shape=[num_hops, vocab_size, hdim], 
+                    dtype=tf.float32, 
+                    initializer=self.init))
+
+                B = mask_emb(tf.get_variable('B', 
+                    shape=[vocab_size, hdim], 
+                    dtype=tf.float32, 
+                    initializer=self.init))
+
+                C = mask_emb(tf.get_variable('C', 
+                    shape=[num_hops, vocab_size, hdim], 
+                    dtype=tf.float32, 
+                    initializer=self.init))
 
             with tf.name_scope('question'):
                 # embed questions
