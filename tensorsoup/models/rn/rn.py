@@ -64,8 +64,7 @@ class RelationNet(object):
             placeholders['answers'] = answers
 
             # get last 20 sentences in context
-            context_sliced = tf.slice(tf.reverse(context, axis=[1]), 
-                        [0,0,0], [-1,clen_max,-1])
+            context_sliced = tf.slice(context, [0,0,0], [-1,clen_max,-1])
 
             # get batch size
             batch_size = tf.shape(queries)[0]
@@ -94,23 +93,18 @@ class RelationNet(object):
                 c_rcell = rcell('lstm', lstm_units)
                 # list of context objects
                 co = []
-                # iterate through sentences in context
-                cemb_reshaped = tf.transpose(cemb, [1,0,2,3])
-                c_reshaped = tf.transpose(context_sliced, [1,0,2])
-                #  [clen, batch_size, slen, lstm_units]
-                for i in range(clen_max):
-                    # get final state
-                    context_i = cemb_reshaped[i]
-                    _, final_state = tf.nn.dynamic_rnn(c_rcell, 
-                                                       inputs=context_i,
-                                                       sequence_length=seqlen(c_reshaped[i]),
-                                                       initial_state=c_rcell.zero_state(batch_size,
-                                                                                       tf.float32)
-                                                      )
-                    tf.get_variable_scope().reuse_variables()
-                    co.append(tf.concat([final_state.c,
-                                        final_state.h], axis=-1, 
-                                        name='object_' + str(i)))
+                context_reshaped = tf.reshape(cemb, [-1, slen, lstm_units])
+                # get final state
+                _, final_state = tf.nn.dynamic_rnn(c_rcell, 
+                                       inputs=context_reshaped,
+                                       initial_state=c_rcell.zero_state(batch_size*clen_max,
+                                                                   tf.float32))
+                final_state = tf.concat([final_state.c, final_state.h], axis=-1)
+
+                # separate out the objects
+                objects = tf.reshape(final_state, [batch_size, clen_max, lstm_units*2])
+                # get context objects as list
+                co = tf.unstack(tf.transpose(objects, [1,0,2]))
 
             # object pairs
             with tf.variable_scope('object_pairs'):
@@ -193,5 +187,5 @@ if __name__ == '__main__':
             vocab_size = 120, lr=0.0002)
 
     # sanity check
-    op = sanity(rn.g, fetch_data=True)
-    print(op.shape)
+    out = sanity(rn.loss, fetch_data=True)
+    print(out)
