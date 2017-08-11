@@ -79,9 +79,15 @@ class RelationNet(object):
                 qemb = tf.nn.embedding_lookup(qemb_mat, queries)
                 cemb = tf.nn.embedding_lookup(cemb_mat, context_sliced)
 
+            # set dropout
+            dropout = tf.cond(mode < 2,
+                    lambda : 0.5, # training
+                    lambda : 0.) # testing
+
             # question LSTM
             with tf.variable_scope('question_lstm'):
-                q_rcell = rcell('lstm', lstm_units)
+                q_rcell = rcell('lstm', num_units=lstm_units,
+                        dropout=0.)
                 _, q_final_state = tf.nn.dynamic_rnn(q_rcell, inputs=qemb, 
                                      sequence_length=seqlen(queries), 
                                      initial_state=q_rcell.zero_state(batch_size, 
