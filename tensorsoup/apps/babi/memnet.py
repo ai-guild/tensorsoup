@@ -43,7 +43,7 @@ def train_separate(task, dataset='1k', iterations=1,
 
     with tf.Session() as sess:
         # run for multiple initializations
-        i, accuracy = 0, [0.]
+        i, accuracy, model_params  = 0, [0.], []
         while accuracy[-1] < 0.95 and i < iterations:
             # init session
             sess.run(tf.global_variables_initializer())
@@ -76,13 +76,14 @@ def train_separate(task, dataset='1k', iterations=1,
             i += 1
             # add accuracy to list
             accuracy.append(acc)
+            model_params.append(sess.run(tf.trainable_variables()))
             print(acc)
 
         print(':: [x/x] End of training')
         print(':: Max accuracy :', max(accuracy))
 
-        # return model and model params
-        return model, sess.run(tf.trainable_variables())
+        # return model and best model params
+        return model, model_params[acc.index(max(acc))]
 
 
 '''
