@@ -194,7 +194,9 @@ def process(path, dtype, serialize=True):
             'train' : { k:[] for k in KEYS },
             'test'  : { k:[] for k in KEYS }
             }
+
     # process 20 tasks
+    struc_texts_test = [] # plural -> list
     for i in range(1, 21):
         # process train and test files
         testfile, trainfile = get_files_by_task(i)
@@ -205,6 +207,9 @@ def process(path, dtype, serialize=True):
         metadata = gather_metadata(struc_text_train, 
                 struc_text_test)
 
+        # append to list (to be used later)
+        struc_texts_test.append(struc_text_test)
+
         # index structured text
         data[i] = {
                 'train' : index(struc_text_train, metadata),
@@ -213,12 +218,22 @@ def process(path, dtype, serialize=True):
                 }
 
         # combine text data
-        for tag in TAGS:
-            for k in KEYS:
-                data[tag][k].extend(struc_text_train[k])
+        for k in KEYS:
+            data['train'][k].extend(struc_text_train[k])
+            data['test'][k].extend(struc_text_test[k])
 
     # gather metadata for joined tasks
     metadata = gather_metadata(data['train'], data['test'])
+
+    # index combined data
+    for tag in TAGS:
+        data[tag] = index(data[tag], metadata)
+
+    # add test set separate tasks to data['test']
+    #  reindex individual tasks data
+    for j in range(1, 21):
+        # reindex with global metadata
+        data['test'][j] = index(struc_texts_test[j-1], metadata)
 
     if serialize:
         print(':: [1/1] Serialize data and metadata')
@@ -257,13 +272,20 @@ def gather(dtype, task=0):
     # check task > 0
     #  return separate tasks
     if task > 0:
-        return pad(data[task], data[task]['metadata'])
+        metadata = data[task]['metadata']
+        data = { 'train' : pad(data[task]['train'], metadata),
+                'test' : pad(data[task]['test'], metadata)
+                }
 
-    if task == -1: # return all separate tasks
-        return [ pad(data[i], data[i]['metadata']) for i in range(1,21) ]
+    else:
+        # task = 0
+        train = pad(data['train'], metadata)
+        test = { k:pad(data['test'][k], metadata) for k in range(1,21) }
+        test.update(pad(data['test'], metadata))
+        data = { 'train' : train, 'test' : test}
 
-    return pad({ 'train' : data['train'],
-            'test' : data['test'] }, metadata)
+
+    return data, metadata
         
 
 def pad(data, metadata):
@@ -272,18 +294,17 @@ def pad(data, metadata):
 
     memory_size = min(clen, MAX_MEMORY_SIZE)
 
-    for k in ['train', 'test']:
-        padded_data[k] = { 
-            'contexts' : pad_sequences(data[k]['contexts'],
-                maxlens = [memory_size, slen], metadata=metadata),
-            'questions' : pad_sequences(data[k]['questions'],
-                maxlens = [0, qlen], metadata=metadata),
-            'answers' : np.array(data[k]['answers']),
-            'supports' : np.array(data[k]['supports'])
-            }
+    padded_data = { 
+        'contexts' : pad_sequences(data['contexts'],
+            maxlens = [memory_size, slen], metadata=metadata),
+        'questions' : pad_sequences(data['questions'],
+            maxlens = [0, qlen], metadata=metadata),
+        'answers' : np.array(data['answers']),
+        'supports' : np.array(data['supports'])
+        }
 
     # TODO : separate shuffle from pad
-    return shuffle(padded_data), metadata
+    return shuffle(padded_data)
 
 
 
