@@ -10,6 +10,7 @@ from recurrence import *
 from collections import OrderedDict
 import itertools
 
+from models.memorynet.modules import mask_emb
 
 
 def seqlen(seq):
@@ -70,10 +71,10 @@ class RelationNet(object):
             batch_size = tf.shape(queries)[0]
 
             with tf.name_scope('embedding'):
-                qemb_mat = tf.get_variable('qemb_mat', shape=[vocab_size, lstm_units], dtype=tf.float32,
-                                          initializer=self.init)
-                cemb_mat = tf.get_variable('cemb_mat', shape=[vocab_size, lstm_units], dtype=tf.float32,
-                                          initializer=self.init)
+                qemb_mat = mask_emb(tf.get_variable('qemb_mat', shape=[vocab_size, lstm_units], dtype=tf.float32,
+                                          initializer=self.init))
+                cemb_mat = mask_emb(tf.get_variable('cemb_mat', shape=[vocab_size, lstm_units], dtype=tf.float32,
+                                          initializer=self.init))
 
                 qemb = tf.nn.embedding_lookup(qemb_mat, queries)
                 cemb = tf.nn.embedding_lookup(cemb_mat, context_sliced)
@@ -187,5 +188,5 @@ if __name__ == '__main__':
             vocab_size = 120, lr=0.0002)
 
     # sanity check
-    out = sanity(rn.loss, fetch_data=True)
+    out = sanity(rn.g, fetch_data=True)
     print(out)
