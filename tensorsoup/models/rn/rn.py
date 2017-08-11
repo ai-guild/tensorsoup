@@ -21,11 +21,11 @@ def seqlen(seq):
 
 class RelationNet(object):
 
-    def __init__(self, clen, qlen, slen, vocab_size, 
-            lstm_units=32,
+    def __init__(self, clen, qlen, slen, 
+            vocab_size, num_candidates,
+            lstm_units=100,
             g_hdim = [256,256,256],
-            f_hdim = [256,512, None],
-            lr=0.025):
+            f_hdim = [256,512, None]):
 
         # final output shape
         f_hdim[-1] = vocab_size
@@ -38,13 +38,10 @@ class RelationNet(object):
         tf.reset_default_graph()
 
         # initializer
-        self.init = tf.random_uniform_initializer(-1., 1.)
+        self.init = tf.random_uniform_initializer(0., 0.1)
 
         # num of copies of model (for multigpu training)
         self.n = 1
-
-        optimizer = tf.train.AdamOptimizer(learning_rate=lr)
-
 
         def inference():
 
@@ -58,6 +55,7 @@ class RelationNet(object):
                 answers = tf.placeholder(tf.int32, shape=[None, ], 
                         name='answers')
                 mode = tf.placeholder(tf.int32, shape=(), name='mode')
+                lr = tf.placeholder(tf.int32, shape=(), name='lr')
 
             # expose handle to placeholders
             placeholders = OrderedDict()
@@ -82,7 +80,7 @@ class RelationNet(object):
 
             # set dropout
             dropout = tf.cond(mode < 2,
-                    lambda : 0.5, # training
+                    lambda : 0.1, # training
                     lambda : 0.) # testing
 
             # question LSTM
@@ -90,9 +88,8 @@ class RelationNet(object):
                 q_rcell = rcell('lstm', num_units=lstm_units,
                         dropout=0.)
                 _, q_final_state = tf.nn.dynamic_rnn(q_rcell, inputs=qemb, 
-                                     sequence_length=seqlen(queries), 
-                                     initial_state=q_rcell.zero_state(batch_size, 
-                                                                  tf.float32))
+                                     sequence_length=seqlen(queries),
+                                     dtype=tf.float32)
                 qo = tf.concat([q_final_state.c, q_final_state.h], 
                                axis=-1)
 
@@ -103,10 +100,9 @@ class RelationNet(object):
                 co = []
                 context_reshaped = tf.reshape(cemb, [-1, slen, lstm_units])
                 # get final state
-                _, final_state = tf.nn.dynamic_rnn(c_rcell, 
-                                       inputs=context_reshaped,
-                                       initial_state=c_rcell.zero_state(batch_size*clen_max,
-                                                                   tf.float32))
+                _, final_state = tf.nn.dynamic_rnn(c_rcell, inputs=context_reshaped,
+                        dtype=tf.float32)
+
                 final_state = tf.concat([final_state.c, final_state.h], axis=-1)
 
                 # separate out the objects
@@ -169,10 +165,12 @@ class RelationNet(object):
 
             # optimization
             with tf.name_scope('optimization'):
+                optimizer = tf.train.AdamOptimizer(learning_rate=lr)
                 # gradient clipping
-                gvs = optimizer.compute_gradients(loss)
-                clipped_gvs = [(tf.clip_by_norm(grad, 40.), var) for grad, var in gvs]
-                self.train_op = optimizer.apply_gradients(clipped_gvs)
+                #gvs = optimizer.compute_gradients(loss)
+                #clipped_gvs = [(tf.clip_by_norm(grad, 40.), var) for grad, var in gvs]
+                #self.train_op = optimizer.apply_gradients(clipped_gvs)
+                self.train_op = optimizer.minimize(cross_entropy)
 
 
             self.logits = logits
@@ -182,6 +180,7 @@ class RelationNet(object):
             self.queries = queries
             self.answers = answers
             self.mode = mode
+            self.lr = lr
 
             # debug
             self.g = g
