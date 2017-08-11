@@ -26,7 +26,6 @@ class Trainer(object):
 
     def evaluate(self, feed=None, 
             batch_size=None,
-            lr = None, # learning rate
             visualizer=None):
 
         # convenience
@@ -36,8 +35,6 @@ class Trainer(object):
         feed = feed if feed else self.testfeed
         # set batch size
         batch_size = batch_size if batch_size else self.batch_size
-        # set learning rate
-        lr = lr if lr else self.lr
 
         # get num of examples
         num_examples = feed.getN()

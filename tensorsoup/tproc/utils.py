@@ -108,4 +108,5 @@ def shuffle(data):
         #  get shuffled arrays
         return { k:data_[k][indices] for k in data_.keys() }
 
-    return { k:_shuffle(data[k]) for k in data.keys() }
+    #return { k:_shuffle(data[k]) for k in data.keys() }
+    return _shuffle(data)
