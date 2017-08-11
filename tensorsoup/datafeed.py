@@ -28,7 +28,7 @@ class DataFeed(object):
         self.offset = 0
         # get num of examples
         #  get a value from dict
-        self.n = len(list(data.values())[0])
+        self.n = len(data[self.dformat[0]])
         # bind data to instance
         self.data = data
 
