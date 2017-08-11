@@ -11,6 +11,7 @@ from collections import OrderedDict
 import itertools
 
 from models.memorynet.modules import mask_emb
+from models.rn.modules import batch_norm_relu
 
 
 def seqlen(seq):
@@ -130,15 +131,19 @@ class RelationNet(object):
             # g(theta) 
             with tf.variable_scope('g_theta', reuse=None) as scope:
                 g = rn_inputs
-                for hdim in g_hdim:
-                    g = tf.contrib.layers.fully_connected(g, hdim)
+                for i, hdim in enumerate(g_hdim):
+                    #g = tf.contrib.layers.fully_connected(g, hdim)
+                    g = batch_norm_relu(g, hdim, phase=(mode < 2), 
+                            scope='g_{}'.format(i))
                 g = tf.reshape(g, [n_obj_pairs, batch_size, g_hdim[-1]])
 
             # f(theta)
             with tf.variable_scope('f_phi', reuse=None) as scope:
                 f = tf.reduce_sum(g, axis=0)
-                for hdim in f_hdim:
-                    f = tf.contrib.layers.fully_connected(f, hdim)
+                for i, hdim in enumerate(f_hdim):
+                    #f = tf.contrib.layers.fully_connected(f, hdim)
+                    f = batch_norm_relu(f, hdim, phase=(mode < 2),
+                            scope='f_{}'.format(i))
 
             # final representation -> logits
             logits = f
@@ -194,5 +199,8 @@ if __name__ == '__main__':
             vocab_size = 120, lr=0.0002)
 
     # sanity check
-    out = sanity(rn.g, fetch_data=True)
+    out = sanity(rn.logits, fetch_data=True)
     print(out)
+
+    for item in tf.trainable_variables():
+        print(item)
