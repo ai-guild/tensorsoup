@@ -1,12 +1,15 @@
 import numpy as np
 import pickle
 import os
+from tqdm import tqdm
 
 import sys
 sys.path.append('../../')
 
 from tasks.cbt.tests import *
 from tproc.utils import *
+
+from tasks.cbt.pipeline import *
 
 
 BASE_PATH = '../../../datasets/CBTest/data'
@@ -20,6 +23,8 @@ TYPE_NE = 'NE'
 UNK = '<unk>'
 PAD = '<pad>'
 special_tokens = [ PAD, UNK ]
+
+KEYS = [ 'stories', 'queries', 'candidates', 'answers', 'vocab' ]
 
 
 def _read_sample(n, samples):
@@ -43,7 +48,7 @@ def _read_sample(n, samples):
     for line in lines[:-1]:
         context += line.lstrip('0123456789')
     query = lines[-1].split('\t')[0].lstrip('21')
-    candidates = lines[-1].split('\t')[-1].replace('|', ' ')
+    candidates = lines[-1].split('\t')[-1]
     answer = lines[-1].split('\t')[1]
     return context, query, candidates, answer
 
@@ -65,63 +70,37 @@ def fetch_data(path):
     '''
 
     with open(path) as f:
-        raw_data = f.read()
+        raw_data = rtext_pipeline(f.read())
         samples = raw_data.split('\n\n')[:-1]  # Last split is empty
     contexts, queries, candidates, answers = [], [], [], []
+    words = [] # keep track of words
     for i in range(len(samples)):
         co, qu, ca, an = _read_sample(i, samples)
+
+        co = strip(co)
+        qu = strip(qu)
+
         contexts.append(co)
         queries.append(qu)
-        candidates.append(ca)
+        candidates.append(preprocess_candidates(ca))
         answers.append(an)
+        # add words from q and d 
+        words.append(co.split(' ') + qu.split(' '))
 
-    return (contexts, queries, candidates, answers)
+    return contexts, queries, candidates, answers, 
+            list(set(words))
 
 
 def preprocess_candidates(c):
-    # check each word
-    #  remove non-words
-    words = [ preprocess_text(w) for w in c.split(' ') if is_word(w) ]
-    
+    words = [ w for w in c.split('|') if w ]
     # add empty candidates if len(words) < 10
     words = words + ['']*(10-len(words))
-
     # make sure len(words) == 10
     assert len(words) == 10
-
     return words
 
 
-def preprocess(raw_dataset):
-
-    stories, queries, candidates, answers = raw_dataset
-    processed = []
-
-    # preprocessing
-    for i, data in enumerate([stories, queries, answers]):
-        print(':: <preprocess> [{}/3] preprocessing text'.format(i+1))
-        processed.append([ preprocess_text(item) 
-            for item in data ])
-
-    # preprocess candidates
-    print(':: <preprocess> [1/1] preprocessing candidates')
-    candidates = [ preprocess_candidates(c) for c in candidates ]
-
-
-    dataset = { 'stories' : processed[0],
-                'queries' : processed[1],
-                'answers' : processed[2]
-               }
-
-    dataset['candidates'] = candidates
-
-    print(':: <preprocess> preprocessing complete; returning dataset')
-    return dataset
-
-
 def gather_metadata(data, vocab):
-    # assumption : max story/query len of training set is larger than test/valid
-    #  i'm sure this will come back to bite me in the ass
     return {
             'slen' : max([len(s.split(' ')) for s in data['stories']]),
             'qlen' : max([len(q.split(' ')) for q in data['queries']]),
@@ -242,8 +221,35 @@ def filter_data(idata, num_windows=30, qlen=40):
     return data
 
 
+def process_file(filename, run_tests=False, window_size=0):
+    # fetch data from file
+    data = fetch_data(filename)
+
+    # convert data in the form of list of list
+    #  to dict of list
+    data = { k:v for k,v in zip(KEYS, data) }
+
+    if window_size:
+        print(':: <proc> [3/3] Get windows')
+        data = build_windows(data, window_size=5)
+        
+        # filter data based on num of windows
+        #  NOTE : analyze data to chop off rough edges
+        data = filter_data(data, num_windows=50, qlen=60)
+
+    if run_tests:
+        print(':: <test> [1/2] Test preprocessed data')
+        test_preprocessed_dataset(data)
+
+        if window_size:
+            print(':: <test> [2/2] Test windows')
+            test_windows(data['windows'], window_size=5)
+
+    return data
+
+
 def process(path=BASE_PATH, tag=TYPE_NE, run_tests=False, 
-        serialize_data=True, window_size=5):
+        serialize_data=True, window_size=0):
 
     # build file names
     train_file = 'cbtest_{}_train.txt'.format(tag)
@@ -258,24 +264,27 @@ def process(path=BASE_PATH, tag=TYPE_NE, run_tests=False,
     print(':: [3/3] Fetch TEST Data')
     test  = process_file(path + '/' + test_file, window_size)
 
-    texts = []
-    for data in [train, test, valid]:
-        texts.extend([ ' '.join(w) for windows in data['windows']
-            for w in windows])
-        texts.extend(data['queries'])
-        texts.extend([ ' '.join(c) for candidates in data['candidates']
-            for c in candidates])
-        texts.extend(data['answers'])
-
-    # build vocabulary
-    print(':: [1/2] build vocabulary')
-    vocab = build_vocabulary(texts, special_tokens)
-    print(':: [2/2] vocabulary size', len(vocab))
-
-    if run_tests:
-        print(':: <test> [1/1] Test vocabulary')
+    if window_size:
+        texts = []
         for data in [train, test, valid]:
-            test_vocabulary(vocab, data)
+            texts.extend([ ' '.join(w) for windows in data['windows']
+                for w in windows])
+            texts.extend(data['queries'])
+            texts.extend([ ' '.join(c) for candidates in data['candidates']
+                for c in candidates])
+            texts.extend(data['answers'])
+
+        # build vocabulary
+        print(':: [1/2] build vocabulary')
+        vocab = build_vocabulary(texts, special_tokens)
+        print(':: [2/2] vocabulary size', len(vocab))
+
+    else:
+        vocab = sorted(list(set(train['vocab'] + test['vocab'] + valid['vocab'])))
+        vocab =  special_tokens + vocab
+
+    # integrate train/test/valid
+    data = { 'train' : train, 'test' : test, 'valid' : valid }
 
     # metadata
     metadata = gather_metadata(train, vocab)
@@ -320,33 +329,6 @@ def gather(path=BASE_PATH, tag=TYPE_NE, window_size=5):
     #  process raw data and return
     return process(path=path, tag=tag, window_size=window_size)
 
-
-def process_file(filename, run_tests=True, window_size=5):
-    # fetch data from file
-    print(':: <proc> [1/3] Fetch data from file')
-    data = fetch_data(filename)
-
-    print(':: <proc> [2/3] Preprocess data')
-    data = preprocess(data)
-
-    if window_size:
-        print(':: <proc> [3/3] Get windows')
-        data = build_windows(data, window_size=5)
-
-        
-        # filter data based on num of windows
-        #  NOTE : analyze data to chop off rough edges
-        data = filter_data(data, num_windows=50, qlen=60)
-
-    if run_tests:
-        print(':: <test> [1/2] Test preprocessed data')
-        test_preprocessed_dataset(data)
-
-        if window_size:
-            print(':: <test> [2/2] Test windows')
-            test_windows(data['windows'], window_size=5)
-
-    return data
 
 
 def pad_sequences(idata, metadata):
