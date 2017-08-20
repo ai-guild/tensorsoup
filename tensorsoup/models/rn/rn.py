@@ -19,14 +19,14 @@ def seqlen(seq):
 
 class RelationNet(object):
 
-    def __init__(self, clen, qlen, slen, vocab_size, 
+    def __init__(self, clen, qlen, slen, 
+            vocab_size, num_candidates,
             lstm_units=32,
             g_hdim = [256,256,256],
-            f_hdim = [256,512, None],
-            lr=0.025):
+            f_hdim = [256,512, None]):
 
         # final output shape
-        f_hdim[-1] = vocab_size
+        f_hdim[-1] = num_candidates
 
         # context size : num of sentences in context
         #  is hardcoded to "20" in the model
@@ -41,9 +41,6 @@ class RelationNet(object):
         # num of copies of model (for multigpu training)
         self.n = 1
 
-        optimizer = tf.train.AdamOptimizer(learning_rate=lr)
-
-
         def inference():
 
             with tf.name_scope('input'):
@@ -56,6 +53,7 @@ class RelationNet(object):
                 answers = tf.placeholder(tf.int32, shape=[None, ], 
                         name='answers')
                 mode = tf.placeholder(tf.int32, shape=(), name='mode')
+                lr = tf.placeholder(tf.int32, shape=(), name='lr')
 
             # expose handle to placeholders
             placeholders = OrderedDict()
@@ -64,8 +62,7 @@ class RelationNet(object):
             placeholders['answers'] = answers
 
             # get last 20 sentences in context
-            context_sliced = tf.slice(tf.reverse(context, axis=[1]), 
-                        [0,0,0], [-1,clen_max,-1])
+            context_sliced = tf.slice(context, [0,0,0], [-1,clen_max,-1])
 
             # get batch size
             batch_size = tf.shape(queries)[0]
@@ -102,12 +99,13 @@ class RelationNet(object):
                     # get final state
                     context_i = cemb_reshaped[i]
                     _, final_state = tf.nn.dynamic_rnn(c_rcell, 
-                                                       inputs=context_i,
-                                                       sequence_length=seqlen(c_reshaped[i]),
-                                                       initial_state=c_rcell.zero_state(batch_size,
-                                                                                       tf.float32)
-                                                      )
+                            inputs=context_i, 
+                            sequence_length=seqlen(c_reshaped[i]), 
+                            initial_state=c_rcell.zero_state(
+                                batch_size, tf.float32))
+
                     tf.get_variable_scope().reuse_variables()
+
                     co.append(tf.concat([final_state.c,
                                         final_state.h], axis=-1, 
                                         name='object_' + str(i)))
@@ -164,6 +162,7 @@ class RelationNet(object):
             # optimization
             with tf.name_scope('optimization'):
                 # gradient clipping
+                optimizer = tf.train.AdamOptimizer(learning_rate=lr)
                 gvs = optimizer.compute_gradients(loss)
                 clipped_gvs = [(tf.clip_by_norm(grad, 40.), var) for grad, var in gvs]
                 self.train_op = optimizer.apply_gradients(clipped_gvs)
@@ -176,6 +175,7 @@ class RelationNet(object):
             self.queries = queries
             self.answers = answers
             self.mode = mode
+            self.lr = lr
 
             # debug
             self.g = g
@@ -184,14 +184,3 @@ class RelationNet(object):
 
         # execute inference and build graph
         inference()
-
-
-if __name__ == '__main__':
-
-    # instantiate RN
-    rn = RelationNet(clen=50, qlen=12, slen=14,
-            vocab_size = 120, lr=0.0002)
-
-    # sanity check
-    op = sanity(rn.g, fetch_data=True)
-    print(op.shape)
