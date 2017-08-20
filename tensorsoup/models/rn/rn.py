@@ -10,6 +10,8 @@ from recurrence import *
 from collections import OrderedDict
 import itertools
 
+from models.memorynet.modules import mask_emb
+from models.rn.modules import batch_norm_relu
 
 
 def seqlen(seq):
@@ -21,7 +23,7 @@ class RelationNet(object):
 
     def __init__(self, clen, qlen, slen, 
             vocab_size, num_candidates,
-            lstm_units=32,
+            lstm_units=100,
             g_hdim = [256,256,256],
             f_hdim = [256,512, None]):
 
@@ -36,7 +38,7 @@ class RelationNet(object):
         tf.reset_default_graph()
 
         # initializer
-        self.init = tf.random_uniform_initializer(-1., 1.)
+        self.init = tf.random_uniform_initializer(0., 0.1)
 
         # num of copies of model (for multigpu training)
         self.n = 1
@@ -68,21 +70,26 @@ class RelationNet(object):
             batch_size = tf.shape(queries)[0]
 
             with tf.name_scope('embedding'):
-                qemb_mat = tf.get_variable('qemb_mat', shape=[vocab_size, lstm_units], dtype=tf.float32,
-                                          initializer=self.init)
-                cemb_mat = tf.get_variable('cemb_mat', shape=[vocab_size, lstm_units], dtype=tf.float32,
-                                          initializer=self.init)
+                qemb_mat = mask_emb(tf.get_variable('qemb_mat', shape=[vocab_size, lstm_units], dtype=tf.float32,
+                                          initializer=self.init))
+                cemb_mat = mask_emb(tf.get_variable('cemb_mat', shape=[vocab_size, lstm_units], dtype=tf.float32,
+                                          initializer=self.init))
 
                 qemb = tf.nn.embedding_lookup(qemb_mat, queries)
                 cemb = tf.nn.embedding_lookup(cemb_mat, context_sliced)
 
+            # set dropout
+            dropout = tf.cond(mode < 2,
+                    lambda : 0.1, # training
+                    lambda : 0.) # testing
+
             # question LSTM
             with tf.variable_scope('question_lstm'):
-                q_rcell = rcell('lstm', lstm_units)
+                q_rcell = rcell('lstm', num_units=lstm_units,
+                        dropout=0.)
                 _, q_final_state = tf.nn.dynamic_rnn(q_rcell, inputs=qemb, 
-                                     sequence_length=seqlen(queries), 
-                                     initial_state=q_rcell.zero_state(batch_size, 
-                                                                  tf.float32))
+                                     sequence_length=seqlen(queries),
+                                     dtype=tf.float32)
                 qo = tf.concat([q_final_state.c, q_final_state.h], 
                                axis=-1)
 
@@ -90,25 +97,17 @@ class RelationNet(object):
                 # cell for encoding context
                 c_rcell = rcell('lstm', lstm_units)
                 # list of context objects
-                co = []
-                # iterate through sentences in context
-                cemb_reshaped = tf.transpose(cemb, [1,0,2,3])
-                c_reshaped = tf.transpose(context_sliced, [1,0,2])
-                #  [clen, batch_size, slen, lstm_units]
-                for i in range(clen_max):
-                    # get final state
-                    context_i = cemb_reshaped[i]
-                    _, final_state = tf.nn.dynamic_rnn(c_rcell, 
-                            inputs=context_i, 
-                            sequence_length=seqlen(c_reshaped[i]), 
-                            initial_state=c_rcell.zero_state(
-                                batch_size, tf.float32))
+                context_reshaped = tf.reshape(cemb, [-1, slen, lstm_units])
+                # get final state
+                _, final_state = tf.nn.dynamic_rnn(c_rcell, inputs=context_reshaped,
+                        dtype=tf.float32)
 
-                    tf.get_variable_scope().reuse_variables()
+                final_state = tf.concat([final_state.c, final_state.h], axis=-1)
 
-                    co.append(tf.concat([final_state.c,
-                                        final_state.h], axis=-1, 
-                                        name='object_' + str(i)))
+                # separate out the objects
+                objects = tf.reshape(final_state, [batch_size, clen_max, lstm_units*2])
+                # get context objects as list
+                co = tf.unstack(tf.transpose(objects, [1,0,2]))
 
             # object pairs
             with tf.variable_scope('object_pairs'):
@@ -127,15 +126,19 @@ class RelationNet(object):
             # g(theta) 
             with tf.variable_scope('g_theta', reuse=None) as scope:
                 g = rn_inputs
-                for hdim in g_hdim:
-                    g = tf.contrib.layers.fully_connected(g, hdim)
+                for i, hdim in enumerate(g_hdim):
+                    #g = tf.contrib.layers.fully_connected(g, hdim)
+                    g = batch_norm_relu(g, hdim, phase=(mode < 2), 
+                            scope='g_{}'.format(i))
                 g = tf.reshape(g, [n_obj_pairs, batch_size, g_hdim[-1]])
 
             # f(theta)
             with tf.variable_scope('f_phi', reuse=None) as scope:
                 f = tf.reduce_sum(g, axis=0)
-                for hdim in f_hdim:
-                    f = tf.contrib.layers.fully_connected(f, hdim)
+                for i, hdim in enumerate(f_hdim):
+                    #f = tf.contrib.layers.fully_connected(f, hdim)
+                    f = batch_norm_relu(f, hdim, phase=(mode < 2),
+                            scope='f_{}'.format(i))
 
             # final representation -> logits
             logits = f
@@ -161,11 +164,12 @@ class RelationNet(object):
 
             # optimization
             with tf.name_scope('optimization'):
-                # gradient clipping
                 optimizer = tf.train.AdamOptimizer(learning_rate=lr)
-                gvs = optimizer.compute_gradients(loss)
-                clipped_gvs = [(tf.clip_by_norm(grad, 40.), var) for grad, var in gvs]
-                self.train_op = optimizer.apply_gradients(clipped_gvs)
+                # gradient clipping
+                #gvs = optimizer.compute_gradients(loss)
+                #clipped_gvs = [(tf.clip_by_norm(grad, 40.), var) for grad, var in gvs]
+                #self.train_op = optimizer.apply_gradients(clipped_gvs)
+                self.train_op = optimizer.minimize(cross_entropy)
 
 
             self.logits = logits

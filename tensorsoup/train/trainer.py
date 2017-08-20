@@ -156,7 +156,7 @@ class Trainer(object):
             # eval
             if eval_interval:
                 if i and i%eval_interval == 0:
-                    eloss, eacc = self.evaluate(visualizer)
+                    eloss, eacc = self.evaluate(visualizer=visualizer)
                     loss_trend.append(eloss)
                     accuracies.append(eacc)
 

@@ -1,18 +1,18 @@
 import tensorflow as tf
 
 # alias
-rnn = tf.nn.rnn_cell
+#rnn = tf.nn.rnn_cell
+rnn = tf.contrib.rnn
 
 
-def rcell(cell_type, num_units, num_layers=None, dropout=None):
+def rcell(cell_type, num_units, num_layers=None, dropout=0.):
 
     if cell_type == 'lstm':
         cell_ = rnn.LSTMCell(num_units)
     elif cell_type == 'gru':
         cell_ = rnn.GRUCell(num_units)
 
-    if dropout is not None:
-        _cell = lambda : rnn.DropoutWrapper(cell_, output_keep_prob=1. - dropout)
+    _cell = lambda : rnn.DropoutWrapper(cell_, output_keep_prob=1. - dropout)
 
     if num_layers:
         cell_ = rnn.MultiRNNCell([_cell() for _ in range(num_layers)])
