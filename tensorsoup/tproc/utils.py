@@ -77,6 +77,19 @@ def pad_sequences(seqs, maxlens, metadata):
 def list_of_files(path):
     return [ path + '/' + fname for fname in os.listdir(path) ]
 
+def flatten(seq):
+    acc = []
+    def _flatten(seq):
+        # check if we are at the bottom of hierarchy
+        if type(seq) == str:
+            return acc.append(seq)
+        # we need to go deeper
+        else:
+            return [_flatten(item) for item in seq]
+
+    _flatten(seq)
+    return acc
+
 # index sequence with any number of levels
 def index_seq(seq, w2i):
     
