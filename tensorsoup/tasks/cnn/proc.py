@@ -1,206 +1,127 @@
-import numpy as np
-import pickle
-import os
-
 import sys
 sys.path.append('../../')
 
-from tproc.utils import *
-from tasks.cbt.proc import *
+ROOT= '../../../datasets/cnn/'
 
-from tqdm import tqdm
-
-
-DATA_DIR = '../../../datasets/cnnqa/questions/'
-
-# tags
+#corresponding directories
 TRAIN, TEST, VALID = 'training', 'test', 'validation'
-TAGS = TRAIN, VALID, TEST
+TAGS = TRAIN, TEST, VALID
 
-# special tokens
-UNK = '<unk>'
-PAD = '<pad>'
-special_tokens = [ PAD, UNK ]
-
-
-def read_from_file(filename):
-    with open(filename) as f:
-        return [ line for line in f.read().split('\n') if line ]
-
+lass Dictionary(object):
+    def __init__(self, initial_vocab):
+        self.word2idx = {}
+        self.idx2word = []
+        self.size  = 0
+        self.word_counter = {}
     
-def extract_structured_data(filename):
-    return read_from_file(filename)[1:4]
+        self.add_words(initial_vocab)
+    
+    def add_word(self, word):
+        if len(word) > 30:
+            print(word) 
+            exit(1)
+        if word not in self.idx2word:
+            self.idx2word.append(word)
+            self.word2idx[word] = self.size
+            self.size += 1
+            
+        if word not in self.word_counter:
+            self.word_counter[word] = 1
+        else:
+            self.word_counter[word] += 1
+    
+    def add_words(self, words):
+        for word in words:
+            self.add_word(word)
+        
+    def word(self, idx):
+        if idx < self.size:
+            return self.idx2word[idx]
+    
+    def index(self, word):
+        return self.word2idx[word]
+    
+    def wordCount(self, word):
+        return self.word_counter[word]
 
 
-def fetch_data(tag, path, window_size, 
-        max_windows, qlen):
 
-    # get list of files
-    files = list_of_files(path + '/' + tag)
+import os
+from pprint import pprint
+from tqdm import tqdm
+from tproc.utils import preprocess_text
 
-    # init dict
-    data = {
-        'queries' : [],
-        'answers' : [],
-        'candidates' : [],
-        'windows' : [],
-        'window_targets' : []
-    }
+def fetch_data(rootdir, dset=TEST):
+    '''
+    Contexts, Questions, Candidates, Answers, Origwords = fetch_data(ROOT)
+    where ROOT dir contains questions/training/*.question
+    '''
+    samples = []
+    dirname = rootdir + 'questions/' + dset
+    Contexts, Questions, Candidates, Answers, Origwords = [], [], [], [], []
+    for filename in tqdm(os.listdir(dirname)):
+        with open(dirname+'/'+filename) as sample:
+            lines = sample.read().splitlines()
+            url, _, context, _, question, _, answer, _, *__candidates = lines
+            candidates = []
+            origwords = []
+            for c in __candidates:
+                candidate, origword = c.split(':', 1)
+                candidates.append(candidate)
+                origwords.append(origword)
+                
+        context, question, answer = [preprocess_text(i) for i in 
+                                                 [context, question, answer]]
+        Contexts.append(context)
+        Questions.append(question)
+        Candidates.append(candidates)
+        Answers.append(answer)
+        
+    print('------url------------\n', url)
+    print('-------question--------------\n', question)
+    print('---------candidates-----------------\n', candidates)
+    print('--------origwords-----------------\n', origwords)
+    print('---------answer------------------\n', answer)
+    print('---------context-----------------\n', context)
+    
+    return Contexts, Questions, Candidates, Answers, Origwords
 
-    # collect all useful words for vocab
-    words = []
 
-    for f in tqdm(files):
-        s,q,a = extract_structured_data(f)
-
-        # preprocess q
-        q = preprocess_text(q)
-
-        # check num words in query
-        if len(q.split(' ')) > qlen:
-            continue
-
-        # preprocess story, answer
-        s = preprocess_text(s)
-        a = preprocess_text(a)
-
-        # get candidates from story
-        c = get_candidates(s)
-
-        # build windows and window targets
-        w, wt = story2windows(s,c,a, window_size)
-
-        # check for max num of windows
-        if len(w) > max_windows:
-            continue
-
-        # collect words
-        words.extend(q.split(' '))
-        words.extend([ word for wi in w for word in wi ])
-
-        # add to list
-        data['queries'].append(q)
-        data['answers'].append(a)
-        data['candidates'].append(c)
-        data['windows'].append(w)
-        data['window_targets'].append(wt)
-
-    # add list of unique words to data dict
-    data['words'] = list(set(words))
-
+import pickle
+def pickleSet(dirname, contexts, questions, candidates, answers, origwords):
+    '''
+    pickleSet(ROOT+'/processed_questions/test', Contexts, Questions, Candidates, Answers, Origwords)
+    '''
+    names = 'contexts', 'questions', 'candidates', 'answers', 'origwords'
+    data = contexts, questions, candidates, answers, origwords
+    
+    for name, datum in zip(names, data):
+        with open(dirname+'/'+name, 'wb') as f:
+            pickle.dump(datum, f,  pickle.HIGHEST_PROTOCOL)
+            
+def loadSet(dirname):
+    '''
+    loadSet(ROOT+'/processed_questions/'+tag)
+    '''
+    names = 'contexts', 'questions', 'candidates', 'answers', 'origwords'
+    data = []
+    for name in names:
+        with open(dirname+'/'+name, 'rb') as f:
+            data.append(pickle.load(f))
+            
     return data
 
 
-def get_candidates(story):
-    return list(set([ w for w in story.split(' ') 
-        if '@entity' in w ]))
-
-
-def gather_metadata(data, vocab):
-    metadata = {
-            'special_tokens' : special_tokens,
-            'vocab_size' : len(vocab),
-            'w2i' : { w:i for i,w in enumerate(vocab) },
-            'i2w' : vocab 
-            }
-    qlen, memory_size, max_candidates = 0, 0, 0
-    for k in data.keys():
-        qlen = max(qlen, 
-                max([len(q.split(' ')) for q in data[k]['queries']]))
-        memory_size = max(memory_size, 
-                max([len(wi) for wi in data[k]['windows']]))
-        max_candidates = max(max_candidates, 
-                max([len(c) for c in data[k]['candidates']]))
-
-    metadata.update( {
-        'qlen' : qlen, 'memory_size' : memory_size,
-        'max_candidates' : max_candidates
-        })
-
-    return metadata
-
-
-def process(tag, path, window_size):
-
-    if os.path.isfile(path + '/' + tag + '.buffer'):
-        print(':: <process> [1/2] {}.buffer present'.format(tag))
-        print(':: <process> [2/2] Reading from buffer')
-        with open(path + '/' + tag + '.buffer', 'rb') as handle:
-            return pickle.load(handle)
-
-    print(':: <process>', tag)
-
-    # fetch data from file; preprocess
-    print('::\t [1/2] Fetch data from file')
-    data = fetch_data(tag, path, window_size, max_windows=80, qlen=30)
-
-    # save processed data to file
-    print('::\t [2/2] Write data to pickle')
-    with open(path + '/' + tag + '.buffer', 'wb') as handle:
-        pickle.dump(data, handle, pickle.HIGHEST_PROTOCOL)
-
-    return data
-
-
-def generate(path, window_size, serialize=True, 
-        run_tests=False):
-
-    # integrate train, test, valid data
-    data = { }
-
-    # fetch processed data for each tag
-    words = []
-    for i, tag in enumerate(TAGS):
-        print(':: [{}/3] Process {}'.format(i, tag))
-        data[tag] = process(tag, path, window_size)
-        words.extend(data[tag]['words'])
-
-    # build vocabulary
-    print(':: [1/2] Build vocabulary')
-    vocab = special_tokens + sorted(list(set(words)))
-
-    # build metadata
-    print(':: [2/2] Gather metadata')
-    metadata = gather_metadata(data, vocab)
-    # add window info in metadata
-    metadata['window_size'] = window_size 
-
-    # index data
-    for i, tag in enumerate(TAGS):
-        print(':: [{}/{}] Index {}'.format(i, len(TAGS), tag))
-        data[tag] = index(data[tag], metadata)
-
-    # serialize data
-    if serialize:
-        print(':: [1/2] Serialize data')
-        with open('{}/data.pickle'.format(path), 'wb') as handle:
-            pickle.dump(data, handle, pickle.HIGHEST_PROTOCOL)
-        print(':: [2/2] Serialize metadata')
-        with open('{}/metadata.pickle'.format(path), 'wb') as handle:
-            pickle.dump(metadata, handle, pickle.HIGHEST_PROTOCOL)
-
-    return data, metadata
-
-
-def gather(path=DATA_DIR, window_size=5, gen=False):
-
-    # build file names
-    dataf = path + '/data.pickle'
-    metadataf = path + '/metadata.pickle'
-
-    if not gen:
-        if os.path.isfile(dataf) and os.path.isfile(metadataf):
-            print(':: <gather> [1/2] Reading from' , dataf)
-            with open(dataf, 'rb') as handle:
-                data = pickle.load(handle)
-            print(':: <gather> [2/2] Reading from' , metadataf)
-            with open(metadataf, 'rb') as handle:
-                metadata = pickle.load(handle)
-            return data, metadata
-
-    return generate(path, window_size)
-
-
-
-if __name__ == '__main__':
-    data, metadata = gather()
+from tproc.utils import flatten
+def buildDictionary(*args):
+    '''
+    args - list (of list) of words
+    '''
+    dictionary = Dictionary(['PAD', '<eos>'])
+    for i,  text in enumerate(args):
+        print('processing {}th element'.format(i))
+        text = flatten(text)
+            text = flatten(text)
+        dictionary.add_words(text)
+            
+    return dictionary
