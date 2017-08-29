@@ -1,25 +1,39 @@
 import sys
+import logging 
 sys.path.append('../../')
 
 ROOT= '../../../datasets/cnn/'
 
 #corresponding directories
 TRAIN, TEST, VALID = 'training', 'test', 'validation'
-TAGS = TRAIN, TEST, VALID
+DSETS = TRAIN, TEST, VALID
 
-lass Dictionary(object):
-    def __init__(self, initial_vocab):
+class Dictionary(object):
+    count = 0
+    def __init__(self, initial_vocab,
+                 name = None,
+                 max_len=30, logger=None):
+
+        self.initial_vocab = initial_vocab
+        self.max_len = max_len
         self.word2idx = {}
         self.idx2word = []
         self.size  = 0
         self.word_counter = {}
     
         self.add_words(initial_vocab)
-    
+
+        self.name = name if name else 'dictionary-{:000d}'.format(Dictionary.count)
+        self.log = logger if logger else logging.Logger(self.name)
+        self.log.debug('Dictionary {} is built successfully'.format(self.name))
+        Dictionary.count += 1
+                
     def add_word(self, word):
-        if len(word) > 30:
-            print(word) 
-            exit(1)
+        if len(word) > self.max_len:
+            self.log.warning('"{}" exceeds max_len {} - ignoring it'
+                             .format(word, self.max_len))
+            return
+        
         if word not in self.idx2word:
             self.idx2word.append(word)
             self.word2idx[word] = self.size
@@ -56,7 +70,7 @@ from pprint import pprint
 from tqdm import tqdm
 from tproc.utils import preprocess_text
 
-def fetch_data(rootdir, dset=TEST):
+def process_data(rootdir, dset=TEST):
     '''
     Contexts, Questions, Candidates, Answers, Origwords = fetch_data(ROOT)
     where ROOT dir contains questions/training/*.question
@@ -76,7 +90,7 @@ def fetch_data(rootdir, dset=TEST):
                 origwords.append(origword)
                 
         context, question, answer = [preprocess_text(i) for i in 
-                                                 [context, question, answer]]
+                                     [context, question, answer]]
         Contexts.append(context)
         Questions.append(question)
         Candidates.append(candidates)
@@ -95,7 +109,8 @@ def fetch_data(rootdir, dset=TEST):
 import pickle
 def pickleSet(dirname, contexts, questions, candidates, answers, origwords):
     '''
-    pickleSet(ROOT+'/processed_questions/test', Contexts, Questions, Candidates, Answers, Origwords)
+    pickleSet(ROOT+'/processed_questions/test', 
+          Contexts, Questions, Candidates, Answers, Origwords)
     '''
     names = 'contexts', 'questions', 'candidates', 'answers', 'origwords'
     data = contexts, questions, candidates, answers, origwords
@@ -118,15 +133,43 @@ def loadSet(dirname):
 
 
 from tproc.utils import flatten
-def buildDictionary(*args):
+def buildDictionary(intial_vocab=[], *args):
     '''
     args - list (of list) of words
     '''
-    dictionary = Dictionary(['PAD', '<eos>'])
+    dictionary = Dictionary(intial_vocab)
     for i,  text in enumerate(args):
         print('processing {}th element'.format(i))
         text = flatten(text)
+        text = [ t.split() for t in text ]
         text = flatten(text)
         dictionary.add_words(text)
             
     return dictionary
+
+
+
+import os.path
+def load_data(root, dset, dformat=None):
+    processed_dir = root+'/processed_questions'
+    if not os.path.exists(processed_dir):
+        os.mkdir(processed_dir, 0755)
+        contexts, questions, candidates, answers, origwords = process_data(root, dset)
+        pickleSet(processed_dir+'/test', 
+                  contexts, questions, candidates, answers, origwords)
+        
+    else:
+        contexts, questions, candidates, answers, origwords = loadSet(root, dset)
+        
+    data['context']    = contexts
+    data['questions']  = questions
+    data['candidates'] = candidates
+    data['answers']    = answers
+    data['origwords']  = origwords
+
+    for field in data.keys():
+        if field not in dformat:
+            del data[field]
+    
+    return data
+
