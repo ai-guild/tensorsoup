@@ -4,7 +4,10 @@ import random
 import sys
 sys.path.append('../../')
 
-import tasks.cnn.proc as load_data
+TRAIN, TEST, VALID = 'training', 'test', 'validation'
+DSETS = TRAIN, TEST, VALID
+
+from tasks.cnn.proc import load_data, buildDictionary
 
 class DataLoader(object):
     '''
@@ -16,9 +19,9 @@ class DataLoader(object):
     
     def __init__(self,
                  rootdir = '../../../datasets/cnn',
-                 dformat = ['context', 'question', 'answer'],
+                 dsets   = ['training', 'test'],
+                 dformat = ['contexts', 'questions', 'answers'],
                  windows = None
-                 dsets   = ['training', 'test']
     ):
               
         self.rootdir = rootdir
@@ -30,11 +33,13 @@ class DataLoader(object):
             self.data[dset] = load_data(rootdir, dset)
 
         self.build_vocab()
+        self.build_vectors()
 
-    def buildVocab(self, vocabs = ['context', 'answers'])
+    def build_vocab(self, vocabs = ['contexts', 'answers', 'candidates', 'questions']):
         # Build vocabulary for each fields and also a global one
         self.vocab = {'global' : buildDictionary(['PAD', 'UNK', '<eos>'], [])}
-        for dkey, dval in self.data.values():
+
+        for dkey, dval in self.data.items():
             for field in dval.keys():
                 
                 if field not in vocabs:
@@ -46,7 +51,39 @@ class DataLoader(object):
                     self.vocab[field]  = buildDictionary(['PAD', 'UNK', '<eos>'], dval[field])
 
                 self.vocab['global'] += self.vocab[field]
-                
-                    
-    def __call__(self, dset, ):
-        return DataFeed(dformat, self.data[dset])
+
+
+    def build_vectors(self, vocab_pairs=[( ('contexts', 'questions', 'candidates'), 'global' ),
+                                         ( ('answers',)                            , 'answers')
+    ]):
+
+        self.vocab_pairs = {}
+        for a, b in vocab_pairs:
+            
+            self.vocab_pairs.update( { i:b for i in a } )
+            
+        print(self.vocab_pairs)
+        self.vdata = {}
+        for dset in self.data.keys():
+            self.vdata[dset] = {}
+            
+            for field in set(self.data[dset].keys()) & set(self.vocab_pairs.keys()):
+                corr_vocab = self.vocab_pairs[field]
+                print(field, corr_vocab)
+                self.vdata[dset][field] = vectorize_tree(self.data[dset][field],
+                                                         self.vocab[corr_vocab])
+            
+    def __call__(self, dset='training'):
+        return DataFeed(dformat, self.vdata[dset])
+
+    def lookup(self, ids, vocab='test'):
+        return [self.vocab[vocab].idx2word[i] for i in ids]
+    
+def vectorize_tree(node, vocab):
+
+    if type(node) == type([]):
+        return [ vectorize_tree(u, vocab) for u in node ]
+    elif type(node) == type('string'):
+        return vocab.word2idx[node]
+
+    
