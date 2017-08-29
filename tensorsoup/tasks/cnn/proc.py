@@ -45,6 +45,11 @@ lass Dictionary(object):
         return self.word_counter[word]
 
 
+    def __add__(self, other):
+        new = Dictionary(self.initial_vocab + other.initial_vocab)
+        new.add_words(self.idx2word)
+        new.add_words(other.idx2word)
+        return new
 
 import os
 from pprint import pprint
@@ -121,7 +126,7 @@ def buildDictionary(*args):
     for i,  text in enumerate(args):
         print('processing {}th element'.format(i))
         text = flatten(text)
-            text = flatten(text)
+        text = flatten(text)
         dictionary.add_words(text)
             
     return dictionary
