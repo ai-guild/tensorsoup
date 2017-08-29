@@ -91,10 +91,12 @@ def process_data(rootdir, dset=TEST):
                 
         context, question, answer = [preprocess_text(i) for i in 
                                      [context, question, answer]]
-        Contexts.append(context)
-        Questions.append(question)
-        Candidates.append(candidates)
-        Answers.append(answer)
+        
+        Contexts  .append( context   .split() )
+        Questions .append( question  .split() )
+        Answers   .append( answer    .split() )
+        
+        Candidates.append( candidates         )
         
     print('------url------------\n', url)
     print('-------question--------------\n', question)
@@ -151,25 +153,29 @@ def buildDictionary(intial_vocab=[], *args):
 
 import os.path
 def load_data(root, dset, dformat=None):
+
     processed_dir = root+'/processed_questions'
+    dset_dir = processed_dir + '/' + dset
     if not os.path.exists(processed_dir):
-        os.mkdir(processed_dir, 0755)
+        os.mkdir(processed_dir, 0o755)
         contexts, questions, candidates, answers, origwords = process_data(root, dset)
+        os.mkdir(dset_dir, 0o755)
         pickleSet(processed_dir+'/test', 
                   contexts, questions, candidates, answers, origwords)
         
     else:
-        contexts, questions, candidates, answers, origwords = loadSet(root, dset)
-        
-    data['context']    = contexts
+
+        contexts, questions, candidates, answers, origwords = loadSet(dset_dir)
+
+    data = {}
+    data['contexts']    = contexts
     data['questions']  = questions
     data['candidates'] = candidates
     data['answers']    = answers
     data['origwords']  = origwords
 
-    for field in data.keys():
-        if field not in dformat:
-            del data[field]
+    if dformat:
+        data = { key:data[key] for key in dformat }
     
     return data
 
