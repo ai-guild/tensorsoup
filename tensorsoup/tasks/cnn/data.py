@@ -4,70 +4,49 @@ import random
 import sys
 sys.path.append('../../')
 
-import tasks.cnn.proc as proc
-from tasks.cbt.proc import pad_sequences
+import tasks.cnn.proc as load_data
 
+class DataLoader(object):
+    '''
+    loads data and builds vocabs
+    creates DataFeed objects for training, test and validation datasets
+    DataFeed expects a dictionary of dataset-items 
+       - dformat(['contexts', 'questions', 'answers'])
+    '''
+    
+    def __init__(self,
+                 rootdir = '../../../datasets/cnn',
+                 dformat = ['context', 'question', 'answer'],
+                 windows = None
+                 dsets   = ['training', 'test']
+    ):
+              
+        self.rootdir = rootdir
+        self.dformat = dformat
 
-class DataSource(object):
+        self.data = {}
 
-    def __init__(self, datadir=proc.DATA_DIR, 
-            window_size=5,
-            batch_size=128):
+        for dset in dsets:
+            self.data[dset] = load_data(rootdir, dset)
 
-        self.datadir = datadir
-        self.window_size = window_size
-        self.batch_size = batch_size
+        self.build_vocab()
 
-        # load data
-        self.data, self.metadata  = self.fetch()
+    def buildVocab(self, vocabs = ['context', 'answers'])
+        # Build vocabulary for each fields and also a global one
+        self.vocab = {'global' : buildDictionary(['PAD', 'UNK', '<eos>'], [])}
+        for dkey, dval in self.data.values():
+            for field in dval.keys():
+                
+                if field not in vocabs:
+                    continue
+                
+                if field in self.vocab.keys():
+                    self.vocab[field] += buildDictionary(['PAD', 'UNK', '<eos>'], dval[field])
+                else:
+                    self.vocab[field]  = buildDictionary(['PAD', 'UNK', '<eos>'], dval[field])
 
-        # num of examples
-        self.n = {}
-        self.n['train'] = len(self.data['train'][0])
-        self.n['test']  = len(self.data['test'][0])
-        self.n['valid']  = len(self.data['valid'][0])
-
-        # current iteration
-        self.i = 0
-
-    def getN(self, dtype='train'):
-        return self.n[dtype]
-
-    def batch(self, i, dtype='train'):
-        # fetch 'i'th batch
-        s, e = self.batch_size * i, (i+1)* self.batch_size
-        return [ d[s:e] for d in self.data[dtype] ]
-
-
-    def next_batch(self, n=1, dtype='train'):
-        bi = self.batch(self.i, dtype=dtype)
-        if self.i < self.n[dtype]//self.batch_size:
-            self.i = self.i + 1
-        else:
-            self.i = 0
-        return bi
-
-
-    def fetch(self):
-        data, metadata = proc.gather(path=self.datadir, 
-                window_size=self.window_size)
-        # pad sequences
-        data = pad_sequences(data, metadata)
-
-        data_all = {}
-        for tag in [('train','training'), ('test', 'test'), 
-                ('valid', 'validation')]:
-            # init list for each tag
-            data_all[tag[0]] = []
-            for name in ['queries', 'windows', 'answers', 
-                    'candidates', 'window_targets']:
-                data_all[tag[0]].append(data[tag[1]][name])
-        return data_all, metadata
-
-
-if __name__ == '__main__':
-    ds = DataSource(datadir=proc.DATA_DIR, batch_size=3)
-    print(':: <test> batch(i)')
-    print(ds.batch(6, dtype='train'))
-    print(':: <test> next_batch()')
-    print(ds.next_batch())
+                self.vocab['global'] += self.vocab[field]
+                
+                    
+    def __call__(self, dset, ):
+        return DataFeed(dformat, self.data[dset])
