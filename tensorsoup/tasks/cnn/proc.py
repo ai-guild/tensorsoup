@@ -8,77 +8,30 @@ ROOT= '../../../datasets/cnn/'
 TRAIN, TEST, VALID = 'training', 'test', 'validation'
 DSETS = TRAIN, TEST, VALID
 
-class Dictionary(object):
-    count = 0
-    def __init__(self, initial_vocab,
-                 name = None,
-                 max_len=30, logger=None):
-
-        self.initial_vocab = initial_vocab
-        self.max_len = max_len
-        self.word2idx = {}
-        self.idx2word = []
-        self.size  = 0
-        self.word_counter = {}
-    
-        self.add_words(initial_vocab)
-
-        self.name = name if name else 'dictionary-{:000d}'.format(Dictionary.count)
-        self.log = logger if logger else logging.Logger(self.name)
-        self.log.debug('Dictionary {} is built successfully'.format(self.name))
-        Dictionary.count += 1
-                
-    def add_word(self, word):
-        if len(word) > self.max_len:
-            self.log.warning('"{}" exceeds max_len {} - ignoring it'
-                             .format(word, self.max_len))
-            return
-        
-        if word not in self.idx2word:
-            self.idx2word.append(word)
-            self.word2idx[word] = self.size
-            self.size += 1
-            
-        if word not in self.word_counter:
-            self.word_counter[word] = 1
-        else:
-            self.word_counter[word] += 1
-    
-    def add_words(self, words):
-        for word in words:
-            self.add_word(word)
-        
-    def word(self, idx):
-        if idx < self.size:
-            return self.idx2word[idx]
-    
-    def index(self, word):
-        return self.word2idx[word]
-    
-    def wordCount(self, word):
-        return self.word_counter[word]
-
-
-    def __add__(self, other):
-        new = Dictionary(self.initial_vocab + other.initial_vocab)
-        new.add_words(self.idx2word)
-        new.add_words(other.idx2word)
-        return new
+import logging
+log = logging.getLogger('tasks.cnn.proc')
+log.setLevel(logging.DEBUG)
+from pprint import pprint, pformat
 
 import os
 from pprint import pprint
 from tqdm import tqdm
 from tproc.utils import preprocess_text
+from tproc.dictionary import Dictionary, buildDictionary
 
-def process_data(rootdir, dset=TEST):
+def process_data(rootdir, dset=TEST, nsamples=0):
     '''
     Contexts, Questions, Candidates, Answers, Origwords = fetch_data(ROOT)
     where ROOT dir contains questions/training/*.question
     '''
+    print(locals())
     samples = []
-    dirname = rootdir + 'questions/' + dset
+    dirname = rootdir + '/questions/' + dset
     Contexts, Questions, Candidates, Answers, Origwords = [], [], [], [], []
-    for filename in tqdm(os.listdir(dirname)):
+    for samplecount, filename in tqdm(enumerate(os.listdir(dirname))):
+        if nsamples and samplecount > nsamples :
+            break
+        
         with open(dirname+'/'+filename) as sample:
             lines = sample.read().splitlines()
             url, _, context, _, question, _, answer, _, *__candidates = lines
@@ -89,14 +42,15 @@ def process_data(rootdir, dset=TEST):
                 candidates.append(candidate)
                 origwords.append(origword)
                 
-        context, question, answer = [preprocess_text(i) for i in 
+        context, question, answer = [i.split() for i in 
                                      [context, question, answer]]
         
-        Contexts  .append( context   .split() )
-        Questions .append( question  .split() )
-        Answers   .append( answer    .split() )
+        Contexts  .append( context  )        
+        Questions .append( question )
+        Answers   .append( answer   )
         
         Candidates.append( candidates         )
+        Origwords .append( origwords          )
         
     print('------url------------\n', url)
     print('-------question--------------\n', question)
@@ -121,7 +75,7 @@ def pickleSet(dirname, contexts, questions, candidates, answers, origwords):
         with open(dirname+'/'+name, 'wb') as f:
             pickle.dump(datum, f,  pickle.HIGHEST_PROTOCOL)
             
-def loadSet(dirname):
+def loadSet(dirname, nsamples):
     '''
     loadSet(ROOT+'/processed_questions/'+tag)
     '''
@@ -131,41 +85,25 @@ def loadSet(dirname):
         with open(dirname+'/'+name, 'rb') as f:
             data.append(pickle.load(f))
             
-    return data
-
-
-from tproc.utils import flatten
-def buildDictionary(intial_vocab=[], *args):
-    '''
-    args - list (of list) of words
-    '''
-    dictionary = Dictionary(intial_vocab)
-    for i,  text in enumerate(args):
-        print('processing {}th element'.format(i))
-        text = flatten(text)
-        text = [ t.split() for t in text ]
-        text = flatten(text)
-        dictionary.add_words(text)
-            
-    return dictionary
-
+    return [d[:nsamples] for d in data]
 
 
 import os.path
-def load_data(root, dset, dformat=None):
+def load_data(root, dset, dformat=None, nsamples=10000):
 
     processed_dir = root+'/processed_questions'
     dset_dir = processed_dir + '/' + dset
-    if not os.path.exists(processed_dir):
-        os.mkdir(processed_dir, 0o755)
-        contexts, questions, candidates, answers, origwords = process_data(root, dset)
+    print('info>> load_data: {}'.format(dset_dir))
+    if not os.path.exists(dset_dir):
+        if not os.path.exists(processed_dir): os.mkdir(processed_dir, 0o755)
+        contexts, questions, candidates, answers, origwords = process_data(root, dset, nsamples)
         os.mkdir(dset_dir, 0o755)
-        pickleSet(processed_dir+'/test', 
+        pickleSet(processed_dir+'/'+dset, 
                   contexts, questions, candidates, answers, origwords)
         
     else:
 
-        contexts, questions, candidates, answers, origwords = loadSet(dset_dir)
+        contexts, questions, candidates, answers, origwords = loadSet(dset_dir, nsamples)
 
     data = {}
     data['contexts']    = contexts
