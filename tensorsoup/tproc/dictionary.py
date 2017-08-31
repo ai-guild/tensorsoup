@@ -2,7 +2,7 @@ import logging
 log = logging.getLogger('tasks.cnn.proc')
 log.setLevel(logging.DEBUG)
 from pprint import pprint, pformat
-
+from tqdm import tqdm
 class Dictionary(object):
     count = 0
     def __init__(self, initial_vocab,
@@ -42,7 +42,7 @@ class Dictionary(object):
             self.log.debug('cannot add this item to dictionary" {}'.format(pformat(word)))
     
     def add_words(self, words):
-        for word in words:
+        for word in tqdm(words):
             self.add_word(word)
         
     def word(self, idx):
@@ -70,11 +70,11 @@ def buildDictionary(intial_vocab=[], max_len = 30, *args):
 
     dictionary = Dictionary(intial_vocab, max_len=max_len)
     for i,  text in enumerate(args):
-        print('processing {}th element'.format(i))
+        print('buildDictionary: processing {}th element'.format(i))
         text = flatten(text)
         text = [ t.split() for t in text ]
-        text = flatten(text)
-        dictionary.add_words(text)
+        text = set(flatten(text))
+        dictionary.add_words(list(text))
             
     return dictionary
 
