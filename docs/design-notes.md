@@ -21,3 +21,7 @@
 
 - Build a data feed, that will accept data dictionary
 - Instantiate and maintain 2 copies of data feed, one for train and one for test (in app)
+
+
+**References**
+- (TorchText)[https://github.com/pytorch/text]
