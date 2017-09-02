@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import pickle
 
 
 def is_word(w):
@@ -130,3 +131,12 @@ def vectorize_tree(node, vocab, is_worthy):
         return [ vectorize_tree(u, vocab, is_worthy) for u in node ]
     elif type(node) == type('string'):
         return vocab.index(node) if is_worthy(node) else 1
+
+def serialize(data, filename):
+    with open(filename, 'wb') as handle:
+        pickle.dump(data, handle, pickle.HIGHEST_PROTOCOL)
+
+def read_pickle(filename):
+    with open(filename, 'rb') as handle:
+        data = pickle.load(handle)
+    return data

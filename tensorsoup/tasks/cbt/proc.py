@@ -6,6 +6,13 @@ from tproc.utils import *
 
 from tqdm import tqdm
 
+FIELDS = [ 'context', 'query', 'candidates', 'answer' ]
+#DSETS  = [ 'train', 'test', 'valid' ]
+DSETS  = [ 'test', 'valid' ]
+PICKLES = [ 'data.NE', 'lookup.NE', 'metadata.NE' ]
+
+PATH = '../../../datasets/CBTest/data/'
+
 
 # separate items from text
 def _read_sample(sample):
@@ -97,19 +104,94 @@ def is_worthy(w):
     return len(w) > 0 and len(w) < 30 and 'http' not in w and 'www' not in w
 
 
-if __name__ == '__main__':
-    filepath = '../../../datasets/CBTest/data/cbtest_NE_train.txt'
-    samples = fetch_samples(filepath)
-    #print(samples[119], samples[1300])
+# init metadata
+def init_metadata():
+    return { 
+            'max_candidates' : 10,
+            'clen' : 0,
+            'qlen' : 0
+            }
 
-    vocab = ['PAD', 'UNK']
+# update metadata
+def update_metadata(metadata, data_item):
+    return {
+            'clen' : max(metadata['clen'], len(data_item['context'])),
+            'qlen' : max(metadata['clen'], len(data_item['query']))
+            }
+
+
+def process_file(filepath, vocab, metadata):
+    # fetch samples from file
+    samples = fetch_samples(filepath)
+
+    # maintain vocabulary
     candidate_lookup = {}
+
+    data = {}
+    for k in FIELDS:
+        data[k] = []
+
+    # iterate through samples
     for sample in tqdm(samples):
-        data, vocab, candidate_lookup = process_sample(sample,
+        data_item, vocab, candidate_lookup = process_sample(sample,
                 vocab, candidate_lookup)
 
-    print(vocab)
-    print(candidate_lookup)
+        # update metadata
+        metadata = update_metadata(metadata, data_item)
 
-    print('lookup size : ', len(list(candidate_lookup.keys())))
-    print('vocab size : ', len(vocab))
+        for k in FIELDS:
+            data[k].append(data_item[k])
+
+    return data, vocab, metadata
+
+
+def process():
+
+    # currently we are working only on named entities
+    filepath = {
+            'train' : '../../../datasets/CBTest/data/cbtest_NE_train.txt',
+            'test'  : '../../../datasets/CBTest/data/cbtest_NE_valid_2000ex.txt',
+            'valid' : '../../../datasets/CBTest/data/cbtest_NE_test_2500ex.txt'
+            }
+
+    # maintain
+    #  1. data
+    #  2. (update) lookup -> vocabulary
+    #  3. (update) metadata
+    #    for each tag (train, test, valid)
+    data, metadata = {}, init_metadata()
+    lookup = ['PAD', 'UNK']
+    for tag in DSETS:
+        data_, lookup, metadata = process_file(filepath[tag], lookup, metadata)
+        data[tag] = data_
+
+    # update lookup size in metadata
+    metadata['vocab_size'] = len(lookup)
+
+    # create w2i and i2w
+    w2i = { w:i for i,w in enumerate(lookup) }
+    i2w = lookup
+
+    lookup = { 'w2i' : w2i, 'i2w' :i2w }
+
+    # save to disk
+    serialize(data, PATH + 'data.NE')
+    serialize(lookup, PATH + 'lookup.NE')
+    serialize(metadata, PATH + 'metadata.NE')
+
+    return data, lookup, metadata
+
+def gather():
+
+    for pickle_file in PICKLES:
+        if os.path.isfile(PATH + pickle_file):
+            continue
+        else:
+            return process()
+
+    return [read_pickle(PATH + pfile) for pfile in PICKLES]
+
+
+if __name__ == '__main__':
+    # run process -> get data
+    process()
