@@ -124,11 +124,9 @@ def shuffle(data):
     #return { k:_shuffle(data[k]) for k in data.keys() }
     return _shuffle(data)
 
-def vectorize_tree(node, vocab):
+def vectorize_tree(node, vocab, is_worthy):
 
     if type(node) == type([]):
-        return [ vectorize_tree(u, vocab) for u in node ]
+        return [ vectorize_tree(u, vocab, is_worthy) for u in node ]
     elif type(node) == type('string'):
-        return vocab.word2idx[node]
-
-
+        return vocab.index(node) if is_worthy(node) else 1
