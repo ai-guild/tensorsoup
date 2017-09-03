@@ -125,12 +125,12 @@ def shuffle(data):
     #return { k:_shuffle(data[k]) for k in data.keys() }
     return _shuffle(data)
 
-def vectorize_tree(node, vocab, is_worthy):
+def vectorize_tree(node, dictionary):
 
     if type(node) == type([]):
-        return [ vectorize_tree(u, vocab, is_worthy) for u in node ]
+        return [ vectorize_tree(u, dictionary) for u in node ]
     elif type(node) == type('string'):
-        return vocab.index(node) if is_worthy(node) else 1
+        return dictionary.index(node)
 
 def serialize(data, filename):
     with open(filename, 'wb') as handle:

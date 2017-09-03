@@ -6,6 +6,9 @@ from tproc.utils import *
 
 from tqdm import tqdm
 
+import re
+from dictionary import Dictionary
+
 FIELDS = [ 'context', 'query', 'candidates', 'answer' ]
 #DSETS  = [ 'train', 'test', 'valid' ]
 DSETS  = [ 'test', 'valid' ]
@@ -38,20 +41,19 @@ def fetch_samples(path):
     return samples
 
 # text sample to data item
-def process_sample(sample, vocab, candidate_lookup):
-    # sample -> raw text
-    orig_sample = sample
-
+def process_sample(sample, lookup, candidate_lookup):
+    
+    vocab = lookup.i2w
     # get candidates
     candidates = sample.splitlines()[-1].split('\t')[-1].split('|')
     answer = sample.splitlines()[-1].split('\t')[1].strip()
 
     # filter candidates
-    candidates = [ w for w in candidates if is_worthy(w) ]
+    candidates = [ w for w in candidates if lookup.is_worthy(w) ]
 
     # update vocab
     for w in candidates:
-        if w not in vocab and is_worthy(w):
+        if w not in vocab and lookup.is_worthy(w):
             vocab.append(w)
 
     # add unk to candidates to keep shape at 10
@@ -81,27 +83,26 @@ def process_sample(sample, vocab, candidate_lookup):
 
     for w in (story + ' ' + query).split():
         if w not in vocab:
+            if re.match('cand\d+', w):
+                continue
             vocab.append(w)
 
+    #update the global lookup database
+    lookup.i2w = vocab
+    
     # vectorize sample
     data = {
-            'context' : vectorize_tree(story.split(), vocab, is_worthy),
-            'query' : vectorize_tree(query.split(), vocab, is_worthy),
-            'candidates' : vectorize_tree(candidates, vocab, is_worthy),
-            'answer' : vectorize_tree(answer, vocab, is_worthy)
+            'context' : vectorize_tree(story.split(), lookup),
+            'query' : vectorize_tree(query.split(), lookup),
+            'candidates' : vectorize_tree(candidates, lookup),
+            'answer' : vectorize_tree(answer, lookup)
             }
-
 
     # replace special tokens in vocab with actual words
     #for token, w in candidate_lookup.items():
     #    vocab[vocab.index(token)] = w
 
-    return data, vocab, candidate_lookup
-
-
-# check if a word is worthy
-def is_worthy(w):
-    return len(w) > 0 and len(w) < 30 and 'http' not in w and 'www' not in w
+    return data, lookup, candidate_lookup
 
 
 # init metadata
@@ -120,7 +121,7 @@ def update_metadata(metadata, data_item):
             }
 
 
-def process_file(filepath, vocab, metadata):
+def process_file(filepath, lookup, metadata):
     # fetch samples from file
     samples = fetch_samples(filepath)
 
@@ -133,8 +134,8 @@ def process_file(filepath, vocab, metadata):
 
     # iterate through samples
     for sample in tqdm(samples):
-        data_item, vocab, candidate_lookup = process_sample(sample,
-                vocab, candidate_lookup)
+        data_item, lookup, candidate_lookup = process_sample(sample,
+                lookup, candidate_lookup)
 
         # update metadata
         metadata = update_metadata(metadata, data_item)
@@ -142,7 +143,7 @@ def process_file(filepath, vocab, metadata):
         for k in FIELDS:
             data[k].append(data_item[k])
 
-    return data, vocab, metadata
+    return data, lookup, metadata
 
 
 def process():
@@ -160,19 +161,19 @@ def process():
     #  3. (update) metadata
     #    for each tag (train, test, valid)
     data, metadata = {}, init_metadata()
-    lookup = ['PAD', 'UNK']
+    vocab = ['PAD', 'UNK']
+    lookup = Dictionary(vocab)
     for tag in DSETS:
         data_, lookup, metadata = process_file(filepath[tag], lookup, metadata)
         data[tag] = data_
 
     # update lookup size in metadata
-    metadata['vocab_size'] = len(lookup)
+    metadata['vocab_size'] = len(lookup.i2w)
 
     # create w2i and i2w
-    w2i = { w:i for i,w in enumerate(lookup) }
-    i2w = lookup
+    w2i = { w:i for i,w in enumerate(lookup.i2w) }
 
-    lookup = { 'w2i' : w2i, 'i2w' :i2w }
+    lookup = { 'w2i' : w2i, 'i2w' : lookup.i2w }
 
     # save to disk
     serialize(data, PATH + 'data.NE')
