@@ -2,6 +2,7 @@ import sys
 sys.path.append('../../')
 
 from tasks.cbt.pipeline import *
+from tasks.cbt.modules import *
 from tproc.utils import *
 
 from tqdm import tqdm
@@ -12,6 +13,7 @@ from dictionary import Dictionary
 FIELDS = [ 'context', 'query', 'candidates', 'answer' ]
 #DSETS  = [ 'train', 'test', 'valid' ]
 DSETS  = [ 'test', 'valid' ]
+#DSETS  = [ 'valid' ]
 PICKLES = [ 'data.NE', 'lookup.NE', 'metadata.NE' ]
 
 PATH = '../../../datasets/CBTest/data/'
@@ -182,6 +184,17 @@ def process():
 
     return data, lookup, metadata
 
+
+def pad_data(data):
+    padded_data = {}
+    # for [train, test, valid]
+    for dset in DSETS:
+        # pad each field
+        padded_data[dset] = { k: pad_seq(v) for k,v in data[dset].items() }
+
+    return padded_data
+            
+
 def gather():
 
     for pickle_file in PICKLES:
@@ -190,7 +203,11 @@ def gather():
         else:
             return process()
 
-    return [read_pickle(PATH + pfile) for pfile in PICKLES]
+    data, lookup, metadata = [read_pickle(PATH + pfile) 
+            for pfile in PICKLES]
+
+    return pad_data(data), lookup, metadata
+
 
 
 if __name__ == '__main__':

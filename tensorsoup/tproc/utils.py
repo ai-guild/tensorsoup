@@ -140,3 +140,18 @@ def read_pickle(filename):
     with open(filename, 'rb') as handle:
         data = pickle.load(handle)
     return data
+
+def pad_seq(seqs, PAD=0):
+
+
+    # pad sequence with PAD
+    #  if seqs is a list of lists
+    if type(seqs[0]) == type([]):
+
+        # get maximum length of sequence
+        maxlen = max([len(seq) for seq in seqs])
+
+        seqs = [ seq + [PAD]*(maxlen-len(seq)) for seq in seqs ]
+    
+    # return numpy array
+    return np.array(seqs, dtype=np.int32)
