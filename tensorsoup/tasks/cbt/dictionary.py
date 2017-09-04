@@ -5,15 +5,15 @@ class Dictionary(object):
         self.i2w = i2w
 
     def index(self, word):
-        if word in self.i2w:
-            return self.i2w.index(word)
-        elif re.search('cand(\d+)', word):
-            match = re.search('cand(\d+)', word)
-            if match:
-                return int(match.group(1))
+        if self.is_worthy(word):
+            if word in self.i2w:
+                return self.i2w.index(word)
+            elif re.search('cand(\d+)', word):
+                match = re.search('cand(\d+)', word)
+                if match:
+                    return int(match.group(1))
 
-        else:
-            return self.i2w.index('UNK')
+        return self.i2w.index('UNK')
                 
 
     # check if a word is worthy
