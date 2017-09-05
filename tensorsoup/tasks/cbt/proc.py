@@ -4,13 +4,14 @@ sys.path.append('../../')
 from tasks.cbt.pipeline import *
 from tasks.cbt.modules import *
 from tproc.utils import *
+from tasks.cbt.dictionary import Dictionary
 
 from tqdm import tqdm
 
 import re
-from dictionary import Dictionary
 
-FIELDS = [ 'context', 'query', 'candidates', 'answer' ]
+
+FIELDS = [ 'context', 'query', 'answer', 'candidates' ]
 #DSETS  = [ 'train', 'test', 'valid' ]
 DSETS  = [ 'test', 'valid' ]
 #DSETS  = [ 'valid' ]
@@ -117,10 +118,11 @@ def init_metadata():
 
 # update metadata
 def update_metadata(metadata, data_item):
-    return {
+    metadata.update( {
             'clen' : max(metadata['clen'], len(data_item['context'])),
-            'qlen' : max(metadata['clen'], len(data_item['query']))
-            }
+            'qlen' : max(metadata['qlen'], len(data_item['query']))
+            } )
+    return metadata
 
 
 def process_file(filepath, lookup, metadata):
