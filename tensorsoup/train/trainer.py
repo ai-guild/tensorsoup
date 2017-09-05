@@ -117,7 +117,7 @@ class Trainer(object):
             avg_loss = 0.
             for j in tq(range(num_iterations)):
 
-                bj = feed.next_batch()
+                bj = feed.next_batch(batch_size)
 
                 # fetch items
                 fetch_data = [model.loss, model.train_op]

@@ -12,7 +12,7 @@ class DataFeed(object):
         self.n = 0
 
         # default batch size
-        self.B = 1
+        self.B = 2
 
         # if data available
         if data:
