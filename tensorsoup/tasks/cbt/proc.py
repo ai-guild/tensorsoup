@@ -187,6 +187,31 @@ def process():
     return data, lookup, metadata
 
 
+def pad_data(data, metadata, truncate=False):
+
+    clen = metadata['clen']
+    qlen = metadata['qlen']
+
+    padded_data = {}
+
+    # for [train, test, valid]
+    for dset in DSETS:
+        # pad each field
+        #padded_data[dset] = { k: pad_seq(v) for k,v in data[dset].items() }
+        padded_data[dset] = {
+                'context' : pad_seq(data[dset]['context'], clen, truncate=True),
+                'query' : pad_seq(data[dset]['query'], qlen, truncate=True),
+                'answer' : pad_seq(data[dset]['answer']),
+                'candidates' : pad_seq(data[dset]['candidates'], 10, truncate=True)
+                }
+
+        # add candidate mask over context
+        padded_data[dset]['cmask'] = candidate_mask(padded_data[dset]['context'],
+                padded_data[dset]['candidates'])
+
+    return padded_data
+
+
 def gather():
 
     for pickle_file in PICKLES:
@@ -197,16 +222,7 @@ def gather():
         data, lookup, metadata = [read_pickle(PATH + pfile) 
                 for pfile in PICKLES]
 
-    padded_data = {}
-    # for [train, test, valid]
-    for dset in DSETS:
-        # pad each field
-        padded_data[dset] = { k: pad_seq(v) for k,v in data[dset].items() }
-        # add candidate mask over context
-        padded_data[dset]['cmask'] = candidate_mask(padded_data[dset]['context'],
-                padded_data[dset]['candidates'])
-
-    return padded_data, lookup, metadata
+    return pad_data(data, metadata), lookup, metadata
 
 
 
