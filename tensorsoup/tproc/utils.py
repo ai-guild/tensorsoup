@@ -141,17 +141,26 @@ def read_pickle(filename):
         data = pickle.load(handle)
     return data
 
-def pad_seq(seqs, PAD=0):
-
+def pad_seq(seqs, maxlen=0, PAD=0, truncate=False):
 
     # pad sequence with PAD
     #  if seqs is a list of lists
     if type(seqs[0]) == type([]):
 
         # get maximum length of sequence
-        maxlen = max([len(seq) for seq in seqs])
+        maxlen = maxlen if maxlen else seq_maxlen(seqs)
 
-        seqs = [ seq + [PAD]*(maxlen-len(seq)) for seq in seqs ]
+        def pad_seq_(seq):
+            if truncate and len(seq) > maxlen:
+                # truncate sequence
+                return seq[:maxlen]
+
+            # return padded
+            return seq + [PAD]*(maxlen-len(seq))
+
+        seqs = [ pad_seq_(seq) for seq in seqs ]
     
     # return numpy array
     return np.array(seqs, dtype=np.int32)
+
+seq_maxlen = lambda seqs : max([len(seq) for seq in seqs])
