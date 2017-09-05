@@ -185,28 +185,26 @@ def process():
     return data, lookup, metadata
 
 
-def pad_data(data):
+def gather():
+
+    for pickle_file in PICKLES:
+        if not os.path.isfile(PATH + pickle_file):
+            data, lookup, metadata = process()
+
+    else:
+        data, lookup, metadata = [read_pickle(PATH + pfile) 
+                for pfile in PICKLES]
+
     padded_data = {}
     # for [train, test, valid]
     for dset in DSETS:
         # pad each field
         padded_data[dset] = { k: pad_seq(v) for k,v in data[dset].items() }
+        # add candidate mask over context
+        padded_data[dset]['cmask'] = candidate_mask(padded_data[dset]['context'],
+                padded_data[dset]['candidates'])
 
-    return padded_data
-            
-
-def gather():
-
-    for pickle_file in PICKLES:
-        if os.path.isfile(PATH + pickle_file):
-            continue
-        else:
-            return process()
-
-    data, lookup, metadata = [read_pickle(PATH + pfile) 
-            for pfile in PICKLES]
-
-    return pad_data(data), lookup, metadata
+    return padded_data, lookup, metadata
 
 
 
