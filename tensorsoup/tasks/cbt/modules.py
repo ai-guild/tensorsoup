@@ -12,3 +12,6 @@ def candidate_mask(contexts, candidates):
         mask.append(mask_i)
 
     return np.array(mask, dtype=np.int32)
+
+def reindex_answer(answer, candidates):
+    return [ c.index(a) for a,c in zip(answer, candidates) ]

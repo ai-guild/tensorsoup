@@ -199,10 +199,14 @@ def pad_data(data, metadata, truncate=False):
         # pad each field
         #padded_data[dset] = { k: pad_seq(v) for k,v in data[dset].items() }
         padded_data[dset] = {
-                'context' : pad_seq(data[dset]['context'], clen, truncate=True),
-                'query' : pad_seq(data[dset]['query'], qlen, truncate=True),
-                'answer' : pad_seq(data[dset]['answer']),
-                'candidates' : pad_seq(data[dset]['candidates'], 10, truncate=True)
+                'context' : pad_seq(data[dset]['context'], clen, 
+                    truncate=True),
+                'query' : pad_seq(data[dset]['query'], qlen, 
+                    truncate=True),
+                'answer' : pad_seq(reindex_answer(data[dset]['answer'], 
+                    data[dset]['candidates'])),
+                'candidates' : pad_seq(data[dset]['candidates'], 
+                    10, truncate=True)
                 }
 
         # add candidate mask over context
