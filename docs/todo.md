@@ -6,3 +6,6 @@
 	- [ ] padding
 	- [ ] reindexing
 	- [ ] including masks
+- [ ] Create a based class `Model` for all models
+	- to facilitate data parallelism
+	- more structured inference and optimization
