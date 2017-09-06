@@ -8,8 +8,6 @@ from sanity import sanity
 cell = tf.nn.rnn_cell.LSTMCell
 rnn = tf.nn.rnn_cell
 
-clen = 20
-qlen = 10
 vocab_size = 100
 batch_size = 2
 max_candidates = 10
@@ -20,7 +18,7 @@ num_layers = 3
 
 class ASReader(object):
 
-    def __init__(self, clen, qlen, vocab_size, max_candidates,
+    def __init__(self, vocab_size, max_candidates,
             demb, dhdim, num_layers):
 
         # clear global graph
@@ -33,15 +31,15 @@ class ASReader(object):
         self.n = 1
 
         # define placeholders
-        self._context = tf.placeholder(tf.int32, [None, clen ], 
+        self._context = tf.placeholder(tf.int32, [None, None ], 
                                   name = 'context')
-        self._query = tf.placeholder(tf.int32, [None, qlen],
+        self._query = tf.placeholder(tf.int32, [None, None],
                                name= 'query')
         self._answer = tf.placeholder(tf.int32, [None, ], 
                                 name= 'answer')
         self._candidates = tf.placeholder(tf.int32, [None, max_candidates],
                                     name='candidates')
-        self._cmask = tf.placeholder(tf.float32, [None, max_candidates, clen],
+        self._cmask = tf.placeholder(tf.float32, [None, max_candidates, None],
                                name='cmask')
 
         # default placeholders
@@ -49,8 +47,21 @@ class ASReader(object):
         lr = tf.placeholder(tf.float32, shape=[], name='lr')
  
         # get actual length of context and query
-        batch_clen = tf.reduce_sum(tf.cast(self._context>0, tf.int32), axis=1)
-        batch_qlen = tf.reduce_sum(tf.cast(self._query>0, tf.int32), axis=1)
+        batch_clen = tf.count_nonzero(self._context, axis=1)
+        batch_qlen = tf.count_nonzero(self._query, axis=1)
+
+        #tf.reduce_sum(tf.cast(self._context>0, tf.int32), axis=1)
+        #batch_qlen = tf.reduce_sum(tf.cast(self._query>0, tf.int32), axis=1)
+
+        # maximum clen, qlen in batch
+        clen = tf.cast(tf.reduce_max(batch_clen), tf.int32)
+        qlen = tf.cast(tf.reduce_max(batch_qlen), tf.int32)
+
+        # slice context, query and cmask based on clen, qlen
+        #  shape : [batch_size, clen + len(pad)]
+        _context = tf.slice( self._context, [0, 0], [-1, clen] )
+        _query   = tf.slice( self._query  , [0, 0], [-1, qlen] )
+        _cmask   = tf.slice( self._cmask  , [0, 0, 0], [-1, -1, clen] )
 
         # setup embedding matrix
         emb = tf.get_variable('emb', [vocab_size, demb], tf.float32,
@@ -60,7 +71,7 @@ class ASReader(object):
         with tf.variable_scope('q_encoder', 
                                initializer=tf.orthogonal_initializer()):
             # lookup
-            query_d = tf.nn.embedding_lookup(emb, self._query)
+            query_d = tf.nn.embedding_lookup(emb, _query)
             # forward/backword cells
             fcell = rnn.MultiRNNCell([cell(dhdim) for _ in range(num_layers)])
             bcell = rnn.MultiRNNCell([cell(dhdim) for _ in range(num_layers)])
@@ -78,7 +89,7 @@ class ASReader(object):
         with tf.variable_scope('c_encoder', 
                                initializer=tf.orthogonal_initializer()):
             # lookup
-            context_d = tf.nn.embedding_lookup(emb, self._context)
+            context_d = tf.nn.embedding_lookup(emb, _context)
             # forward/backword cells
             fcell = rnn.MultiRNNCell([cell(dhdim) for _ in range(num_layers)])
             bcell = rnn.MultiRNNCell([cell(dhdim) for _ in range(num_layers)])
@@ -100,7 +111,7 @@ class ASReader(object):
 
         # sum up attention values of candidates
         attention_sum = tf.reduce_sum(
-                tf.expand_dims(attention, axis=1)*self._cmask, axis=2)
+                tf.expand_dims(attention, axis=1)*_cmask, axis=2)
 
         # normalize attention
         prob = tf.nn.softmax(attention_sum)
@@ -142,8 +153,6 @@ class ASReader(object):
 
 
 if __name__ == '__main__':
-    clen = 20
-    qlen = 10
     vocab_size = 100
     max_candidates = 10
     demb = 32
@@ -151,7 +160,7 @@ if __name__ == '__main__':
     num_layers = 3
 
     # instantiate model
-    model = ASReader(clen, qlen, vocab_size, max_candidates, demb,
+    model = ASReader(vocab_size, max_candidates, demb,
             dhdim, num_layers)
 
     results = sanity([model.attention, model.attention_sum, model.prob], 

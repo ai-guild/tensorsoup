@@ -15,3 +15,15 @@ def candidate_mask(contexts, candidates):
 
 def reindex_answer(answer, candidates):
     return [ c.index(a) for a,c in zip(answer, candidates) ]
+
+# sort based on len of context
+#  data : dictionary of padded numpy arrays
+def sort_data(data):
+    context = data['context']
+    n = len(context)
+
+    # sorted based on num zeros (padding symbols)
+    idx = [ w for w,x in sorted(enumerate(context), 
+        key=lambda x : np.count_nonzero(x[1])) ]
+
+    return { k:v[idx] for k,v in data.items() }
