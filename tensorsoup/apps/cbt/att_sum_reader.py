@@ -25,14 +25,12 @@ if __name__ == '__main__':
     testfeed  = DataFeed(dformat, data=data['test' ])
 
     # training params
-    batch_size = 32
+    batch_size = 64
 
     # instantiate model
-    model = ASReader(clen=metadata['clen'], 
-            qlen=metadata['qlen'], 
-            vocab_size=metadata['vocab_size'], 
+    model = ASReader( vocab_size=metadata['vocab_size'], 
             max_candidates= 10, # TODO : fix this ||KeyError: 'max_candidates'||
-            demb=384, dhdim=384,
+            demb=38, dhdim=38,
             num_layers=3)
 
     with tf.Session() as sess:

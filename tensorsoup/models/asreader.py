@@ -5,7 +5,8 @@ import tensorflow as tf
 
 from sanity import sanity
 
-cell = tf.nn.rnn_cell.LSTMCell
+cell_GRU = tf.nn.rnn_cell.GRUCell
+cell_LSTM = tf.nn.rnn_cell.LSTMCell
 rnn = tf.nn.rnn_cell
 
 vocab_size = 100
@@ -73,8 +74,8 @@ class ASReader(object):
             # lookup
             query_d = tf.nn.embedding_lookup(emb, _query)
             # forward/backword cells
-            fcell = rnn.MultiRNNCell([cell(dhdim) for _ in range(num_layers)])
-            bcell = rnn.MultiRNNCell([cell(dhdim) for _ in range(num_layers)])
+            fcell = rnn.MultiRNNCell([cell_GRU(dhdim) for _ in range(num_layers)])
+            bcell = rnn.MultiRNNCell([cell_GRU(dhdim) for _ in range(num_layers)])
             outputs, q_state = tf.nn.bidirectional_dynamic_rnn(cell_fw = fcell,
                                                               cell_bw = bcell,
                                                               inputs=query_d,
@@ -83,7 +84,7 @@ class ASReader(object):
                                                               dtype=tf.float32
                                                               )
             # combine layer_3 forward and backward states
-            query_state = tf.concat([q_state[0][-1].c, q_state[1][-1].c], axis=-1)
+            query_state = tf.concat([q_state[0][-1], q_state[1][-1]], axis=-1)
 
         # context encoder
         with tf.variable_scope('c_encoder', 
@@ -91,8 +92,8 @@ class ASReader(object):
             # lookup
             context_d = tf.nn.embedding_lookup(emb, _context)
             # forward/backword cells
-            fcell = rnn.MultiRNNCell([cell(dhdim) for _ in range(num_layers)])
-            bcell = rnn.MultiRNNCell([cell(dhdim) for _ in range(num_layers)])
+            fcell = rnn.MultiRNNCell([cell_GRU(dhdim) for _ in range(num_layers)])
+            bcell = rnn.MultiRNNCell([cell_GRU(dhdim) for _ in range(num_layers)])
             c_states, _ = tf.nn.bidirectional_dynamic_rnn(cell_fw = fcell,
                                                               cell_bw = bcell,
                                                               inputs=context_d,
