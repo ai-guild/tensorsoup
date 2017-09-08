@@ -21,6 +21,7 @@ def sanity(t, g=None, default_shape=[8,20,100], int_limit = [0, 1000], fetch_dat
             feed_dict[placeholder] = np.random.randint(int_limit[0], int_limit[1],
                     shape, dtype=np.int64)
             
-    with tf.Session() as sess:
+    config = tf.ConfigProto(allow_soft_placement=True)
+    with tf.Session(config=config) as sess:
         sess.run(tf.global_variables_initializer())
         return sess.run(t, feed_dict) if fetch_data else True
