@@ -5,7 +5,7 @@ sys.path.append('../../')
 ROOT= '../../../datasets/cnn/'
 
 #corresponding directories
-TRAIN, TEST, VALID = 'training', 'test', 'validation'
+TRAIN, TEST, VALID = 'train', 'test', 'valid'
 DSETS = TRAIN, TEST, VALID
 
 import logging
@@ -16,104 +16,130 @@ from pprint import pprint, pformat
 import os
 from pprint import pprint
 from tqdm import tqdm
-from tproc.utils import preprocess_text
+from tproc.utils import preprocess_text, serialize, vectorize_tree, pad_seq
 from tproc.dictionary import Dictionary, buildDictionary
 
-def process_data(rootdir, dset=TEST, nsamples=0):
-    '''
-    Contexts, Questions, Candidates, Answers, Origwords = fetch_data(ROOT)
-    where ROOT dir contains questions/training/*.question
-    '''
-    print(locals())
-    samples = []
-    dirname = rootdir + '/questions/' + dset
-    Contexts, Questions, Candidates, Answers, Origwords = [], [], [], [], []
-    for samplecount, filename in tqdm(enumerate(os.listdir(dirname))):
-        if nsamples and samplecount > nsamples :
-            break
+
+class CNNDict(Dictionary):
+    def __init__(self, initial_vocab,
+                 name = None,
+                 max_len=30, logger=None):
+        super(CNNDict, self).__init__(initial_vocab= initial_vocab,
+                                      name=name, max_len=max_len, logger=logger)
+        self.metadata = {}
         
-        with open(dirname+'/'+filename) as sample:
-            lines = sample.read().splitlines()
-            url, _, context, _, question, _, answer, _, *__candidates = lines
-            candidates = []
-            origwords = []
-            for c in __candidates:
-                candidate, origword = c.split(':', 1)
-                candidates.append(candidate)
-                origwords.append(origword)
-                
-        context, question, answer = [i.split() for i in 
-                                     [context, question, answer]]
+    def add_context(self, context):
+        self.metadata['clen'] = max(self.metadata['clen'], len(context))
+        self.add_words(context)
+
+    def add_question(self, question):
+        self.metadata['qlen'] = max(self.metadata['qlen'], len(question))
+        self.add_words(question)
+
+    def add_answer(self, answer):
+        self.add_words(answer)
+
+    def add_candidates(self, candidates):
+        self.add_words(candidates)
         
-        Contexts  .append( context  )        
-        Questions .append( question )
-        Answers   .append( answer   )
+def string_to_sample(string):
+    lines = string.splitlines()
+    url, _, context, _, question, _, answer, _, *__candidates = lines
+    candidates = []
+    origwords = []
+    for c in __candidates:
+        candidate, origword = c.split(':', 1)
+        candidates.append(candidate)
+        origwords.append(origword)
         
-        Candidates.append( candidates         )
-        Origwords .append( origwords          )
+    context, question, answer = [i.split() for i in 
+                                 [context, question, answer]]
         
-    print('------url------------\n', url)
-    print('-------question--------------\n', question)
-    print('---------candidates-----------------\n', candidates)
-    print('--------origwords-----------------\n', origwords)
-    print('---------answer------------------\n', answer)
-    print('---------context-----------------\n', context)
+    return context, question, answer, candidates
+
+def process_sample(filename, data, vocab):
+    with open(filename, 'r') as sample:
+        context, question, answer, candidates = string_to_sample(sample.read())
+
+        vocab.add_context(context)
+        vocab.add_question(question)
+        vocab.add_answer(answer)
+        vocab.add_candidates(candidates)
+
+    data['context']    .append( vectorize_tree(context, vocab)    ) 
+    data['question']   .append( vectorize_tree(question, vocab)   )
+    data['answer']     .append( vectorize_tree(answer, vocab)     )
+    data['candidates'] .append( vectorize_tree(candidates, vocab) )
+        
+    return data, vocab
     
-    return Contexts, Questions, Candidates, Answers, Origwords
+def process_set(dirname, vocab):
+
+    data = {'context': [], 'question' : [], 'answer':[], 'candidates':[]}
+    for filename in tqdm(os.listdir(dirname)):
+        data, vocab = process_sample(dirname+'/'+filename, data, vocab)
+
+    return data, vocab
+
+def process():
+
+    vocab = CNNDict(['PAD', 'UNK'])
+    vocab.metadata = {'clen' : 0, 'qlen':0}
+    
+    basedirs = {
+        #'train' :  '../../../datasets/cnn/questions/training',
+        'test' :  '../../../datasets/cnn/questions/test',
+        #'valid' :  '../../../datasets/cnn/questions/validation',
+        }
+
+    data = {}
+    for set in basedirs.keys():
+        d, v = process_set(basedirs[set], vocab)
+        data[set] = d
+
+    serialize(data, ROOT + 'data.pkl')
+    serialize(vocab.__dict__, ROOT + 'vocab.pkl')
+    
+    return data, vocab
+        
+def pad_data(data, vocab, truncate=False):
+
+    metadata  = vocab.metadata
+    clen = metadata['clen']
+    qlen = metadata['qlen']
+
+    padded_data = {}
+
+    # for [train, test, valid]
+    for dset in ['test']:
+        # pad each field
+        #padded_data[dset] = { k: pad_seq(v) for k,v in data[dset].items() }
+        padded_data[dset] = {
+                'context' : pad_seq(data[dset]['context'], clen, 
+                    truncate=True),
+                'question' : pad_seq(data[dset]['question'], qlen, 
+                    truncate=True),
+                'answer' : pad_seq(data[dset]['answer'], 1),
+                'candidates' : pad_seq(data[dset]['candidates'], 
+                    10, truncate=True)
+                }
+        
+    return padded_data
 
 
 import pickle
-def pickleSet(dirname, contexts, questions, candidates, answers, origwords):
-    '''
-    pickleSet(ROOT+'/processed_questions/test', 
-          Contexts, Questions, Candidates, Answers, Origwords)
-    '''
-    names = 'contexts', 'questions', 'candidates', 'answers', 'origwords'
-    data = contexts, questions, candidates, answers, origwords
-    
-    for name, datum in zip(names, data):
-        with open(dirname+'/'+name, 'wb') as f:
-            pickle.dump(datum, f,  pickle.HIGHEST_PROTOCOL)
-            
-def loadSet(dirname, nsamples):
-    '''
-    loadSet(ROOT+'/processed_questions/'+tag)
-    '''
-    names = 'contexts', 'questions', 'candidates', 'answers', 'origwords'
-    data = []
-    for name in names:
-        with open(dirname+'/'+name, 'rb') as f:
-            data.append(pickle.load(f))
-            
-    return [d[:nsamples] for d in data]
+def gather(fresh=False):
+    vocab  = CNNDict([])
+    if fresh or  not os.path.exists(ROOT+'/data.pkl'):
+        process()
+
+    data = pickle.load(open(ROOT+'/data.pkl', 'rb'))
+    vocab.__dict__ = pickle.load(open(ROOT+'/vocab.pkl', 'rb'))
+
+    print(vocab.size)
+    return pad_data(data, vocab), vocab
 
 
-import os.path
-def load_data(root, dset, dformat=None, nsamples=10000):
+if __name__ == '__main__':
 
-    processed_dir = root+'/processed_questions'
-    dset_dir = processed_dir + '/' + dset
-    print('info>> load_data: {}'.format(dset_dir))
-    if not os.path.exists(dset_dir):
-        if not os.path.exists(processed_dir): os.mkdir(processed_dir, 0o755)
-        contexts, questions, candidates, answers, origwords = process_data(root, dset, nsamples)
-        os.mkdir(dset_dir, 0o755)
-        pickleSet(processed_dir+'/'+dset, 
-                  contexts, questions, candidates, answers, origwords)
-        
-    else:
-
-        contexts, questions, candidates, answers, origwords = loadSet(dset_dir, nsamples)
-
-    data = {}
-    data['contexts']    = contexts
-    data['questions']  = questions
-    data['candidates'] = candidates
-    data['answers']    = answers
-    data['origwords']  = origwords
-
-    if dformat:
-        data = { key:data[key] for key in dformat }
-    
-    return data
-
+    gather(1)
